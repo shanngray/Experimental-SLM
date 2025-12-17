@@ -1,0 +1,14 @@
+[project]
+name = "experimental-slm"
+version = "0.1.0"
+description = "A small, locally runnable language model built from first principles for learning and experimentation"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "torch>=2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
