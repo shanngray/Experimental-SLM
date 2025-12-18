@@ -29,4 +29,4 @@
 - [x] 1.4.2 Verify code follows project style conventions
 - [x] 1.4.3 Run linter and fix any errors
 - [x] 1.4.4 Verify can create dataset from text file
-- [ ] 1.4.5 Commit with message: "Session 2: Dataset preparation"
+- [x] 1.4.5 Commit with message: "Session 2: Dataset preparation"
