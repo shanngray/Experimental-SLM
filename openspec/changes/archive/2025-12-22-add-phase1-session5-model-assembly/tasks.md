@@ -46,5 +46,5 @@
 - [x] 1.5.3 Run linter and fix any errors
 - [x] 1.5.4 Verify model can process a batch end-to-end
 - [x] 1.5.5 Verify logits are correct shape and dtype
-- [ ] 1.5.6 Commit with message: "Session 5: Model assembly"
+- [x] 1.5.6 Commit with message: "Session 5: Model assembly"
 
