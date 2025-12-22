@@ -4,10 +4,15 @@ This module provides the Trainer class that orchestrates the training process,
 including forward pass, loss computation, backward pass, and optimizer updates.
 """
 
+from pathlib import Path
+from typing import Optional
+
 import torch
 import torch.optim
 
 from src.config import TrainingConfig
+from src.tokenizer import Tokenizer
+from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.loss import compute_loss
 
 
@@ -55,7 +60,8 @@ class Trainer:
         self,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
-        config: TrainingConfig
+        config: TrainingConfig,
+        step: int = 0
     ):
         """Initialize the Trainer.
         
@@ -63,11 +69,78 @@ class Trainer:
             model: Transformer model to train (must be a PyTorch nn.Module).
             optimizer: Optimizer for parameter updates (e.g., AdamW).
             config: Training configuration with hyperparameters.
+            step: Initial training step counter (default: 0). Used when resuming.
         """
         self.model = model
         self.optimizer = optimizer
         self.config = config
-        self.step = 0
+        self.step = step
+    
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path: str | Path,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        tokenizer: Tokenizer
+    ) -> "Trainer":
+        """Create a Trainer instance from a saved checkpoint.
+        
+        Loads model state, optimizer state, config, vocabulary, and step counter
+        from a checkpoint and creates a Trainer instance ready to resume training.
+        
+        Args:
+            checkpoint_path: Path to checkpoint directory.
+            model: Model to load state into (will be modified in-place).
+            optimizer: Optimizer to load state into (will be modified in-place).
+            tokenizer: Tokenizer to load vocabulary into (will be modified in-place).
+        
+        Returns:
+            Trainer instance with restored state.
+        
+        Raises:
+            FileNotFoundError: If checkpoint files are missing.
+            RuntimeError: If checkpoint files are corrupted or invalid.
+        """
+        checkpoint_data = load_checkpoint(checkpoint_path, model, optimizer, tokenizer)
+        return cls(
+            model=checkpoint_data["model"],
+            optimizer=checkpoint_data["optimizer"],
+            config=checkpoint_data["config"],
+            step=checkpoint_data["step"]
+        )
+    
+    def save_checkpoint(
+        self,
+        tokenizer: Tokenizer,
+        checkpoint_dir: str | Path = "checkpoints",
+        checkpoint_name: Optional[str] = None
+    ) -> Path:
+        """Save current training state to a checkpoint.
+        
+        Saves model state, optimizer state, config, vocabulary, and step counter
+        to disk for later resuming.
+        
+        Args:
+            tokenizer: Tokenizer containing vocabulary to save.
+            checkpoint_dir: Directory to save checkpoints in (default: "checkpoints").
+            checkpoint_name: Optional name for checkpoint. If None, uses "checkpoint_step_{step}".
+        
+        Returns:
+            Path to the saved checkpoint directory.
+        
+        Raises:
+            IOError: If checkpoint directory cannot be created or files cannot be written.
+        """
+        return save_checkpoint(
+            model=self.model,
+            optimizer=self.optimizer,
+            config=self.config,
+            tokenizer=tokenizer,
+            step=self.step,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_name=checkpoint_name
+        )
     
     def training_step(self, inputs: torch.Tensor) -> float:
         """Perform a single training step.

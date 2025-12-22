@@ -1,0 +1,197 @@
+"""Checkpointing functionality for saving and loading training state.
+
+This module provides functions to save and load complete training state,
+including model weights, optimizer state, training configuration, vocabulary,
+and step counter. This enables resuming training from any saved checkpoint.
+"""
+
+import json
+from pathlib import Path
+from typing import Optional
+
+import torch
+
+from src.config import TrainingConfig
+from src.tokenizer import Tokenizer
+
+
+def save_checkpoint(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    config: TrainingConfig,
+    tokenizer: Tokenizer,
+    step: int,
+    checkpoint_dir: str | Path = "checkpoints",
+    checkpoint_name: Optional[str] = None
+) -> Path:
+    """Save complete training state to disk.
+    
+    Saves model state_dict, optimizer state_dict, training configuration,
+    vocabulary, and step counter to a checkpoint directory. Uses PyTorch
+    format (torch.save) for binary weights and JSON format for metadata.
+    
+    Args:
+        model: The transformer model to save.
+        optimizer: The optimizer to save state for.
+        config: Training configuration to save.
+        tokenizer: Tokenizer containing vocabulary to save.
+        step: Current training step counter.
+        checkpoint_dir: Directory to save checkpoints in (default: "checkpoints").
+        checkpoint_name: Optional name for checkpoint. If None, uses "checkpoint_step_{step}".
+    
+    Returns:
+        Path to the saved checkpoint directory.
+    
+    Raises:
+        IOError: If checkpoint directory cannot be created or files cannot be written.
+    """
+    checkpoint_dir = Path(checkpoint_dir)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
+    if checkpoint_name is None:
+        checkpoint_name = f"checkpoint_step_{step}"
+    
+    checkpoint_path = checkpoint_dir / checkpoint_name
+    checkpoint_path.mkdir(parents=True, exist_ok=True)
+    
+    # Save model state_dict (binary PyTorch format)
+    model_path = checkpoint_path / "model.pt"
+    torch.save(model.state_dict(), model_path)
+    
+    # Save optimizer state_dict (binary PyTorch format)
+    optimizer_path = checkpoint_path / "optimizer.pt"
+    torch.save(optimizer.state_dict(), optimizer_path)
+    
+    # Save vocabulary (JSON format)
+    vocab_path = checkpoint_path / "vocab.json"
+    tokenizer.save_vocab(vocab_path)
+    
+    # Save metadata (JSON format)
+    metadata = {
+        "step": step,
+        "config": config.to_dict(),
+    }
+    metadata_path = checkpoint_path / "metadata.json"
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    
+    return checkpoint_path
+
+
+def load_checkpoint(
+    checkpoint_path: str | Path,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    tokenizer: Tokenizer
+) -> dict:
+    """Load complete training state from disk.
+    
+    Loads model state_dict, optimizer state_dict, training configuration,
+    vocabulary, and step counter from a checkpoint directory.
+    
+    Args:
+        checkpoint_path: Path to checkpoint directory.
+        model: Model to load state into (will be modified in-place).
+        optimizer: Optimizer to load state into (will be modified in-place).
+        tokenizer: Tokenizer to load vocabulary into (will be modified in-place).
+    
+    Returns:
+        Dictionary containing:
+            - "step": int - Training step counter
+            - "config": TrainingConfig - Training configuration
+            - "model": torch.nn.Module - Model (same reference as input)
+            - "optimizer": torch.optim.Optimizer - Optimizer (same reference as input)
+            - "tokenizer": Tokenizer - Tokenizer (same reference as input)
+    
+    Raises:
+        FileNotFoundError: If checkpoint files are missing.
+        RuntimeError: If checkpoint files are corrupted or invalid.
+    """
+    checkpoint_path = Path(checkpoint_path)
+    
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint directory not found: {checkpoint_path}"
+        )
+    
+    if not checkpoint_path.is_dir():
+        raise FileNotFoundError(
+            f"Checkpoint path is not a directory: {checkpoint_path}"
+        )
+    
+    # Load model state_dict
+    model_path = checkpoint_path / "model.pt"
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Model checkpoint file not found: {model_path}"
+        )
+    try:
+        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load model checkpoint from {model_path}: {e}"
+        ) from e
+    
+    # Load optimizer state_dict
+    optimizer_path = checkpoint_path / "optimizer.pt"
+    if not optimizer_path.exists():
+        raise FileNotFoundError(
+            f"Optimizer checkpoint file not found: {optimizer_path}"
+        )
+    try:
+        optimizer.load_state_dict(torch.load(optimizer_path, map_location="cpu"))
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load optimizer checkpoint from {optimizer_path}: {e}"
+        ) from e
+    
+    # Load vocabulary
+    vocab_path = checkpoint_path / "vocab.json"
+    if not vocab_path.exists():
+        raise FileNotFoundError(
+            f"Vocabulary checkpoint file not found: {vocab_path}"
+        )
+    try:
+        tokenizer.load_vocab(vocab_path)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load vocabulary checkpoint from {vocab_path}: {e}"
+        ) from e
+    
+    # Load metadata
+    metadata_path = checkpoint_path / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"Metadata checkpoint file not found: {metadata_path}"
+        )
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load metadata checkpoint from {metadata_path}: {e}"
+        ) from e
+    
+    # Extract step and config
+    step = metadata.get("step")
+    if step is None:
+        raise RuntimeError(
+            f"Step counter not found in metadata: {metadata_path}"
+        )
+    
+    config_dict = metadata.get("config")
+    if config_dict is None:
+        raise RuntimeError(
+            f"Config not found in metadata: {metadata_path}"
+        )
+    
+    config = TrainingConfig.from_dict(config_dict)
+    
+    return {
+        "step": step,
+        "config": config,
+        "model": model,
+        "optimizer": optimizer,
+        "tokenizer": tokenizer,
+    }
+
