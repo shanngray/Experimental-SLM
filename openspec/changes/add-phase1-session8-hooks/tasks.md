@@ -1,0 +1,63 @@
+## 1. Implementation
+- [x] 1.1 Create `src/hooks/__init__.py` module
+- [x] 1.2 Create `src/hooks/registry.py` with hook registry system
+  - [x] 1.2.1 Implement `HookRegistry` class
+  - [x] 1.2.2 Implement hook loading from config
+  - [x] 1.2.3 Implement hook registration (register forward hooks, update hooks)
+  - [x] 1.2.4 Implement hook toggling (enable/disable hooks)
+  - [x] 1.2.5 Implement hook execution (call hooks in order)
+- [x] 1.3 Create `src/hooks/forward_hooks.py` with forward hook implementations
+  - [x] 1.3.1 Implement base forward hook interface
+  - [x] 1.3.2 Implement activation stats hook (logs mean/std of activations)
+  - [x] 1.3.3 Ensure forward hooks don't modify outputs (safety check)
+- [x] 1.4 Create `src/hooks/update_hooks.py` with update hook implementations
+  - [x] 1.4.1 Implement base update hook interface
+  - [x] 1.4.2 Implement identity update hook (default, passes gradients through unchanged)
+  - [x] 1.4.3 Ensure update hooks can receive and transform gradients
+- [x] 1.5 Integrate hooks with Trainer class
+  - [x] 1.5.1 Add hook registry to Trainer initialization
+  - [x] 1.5.2 Call forward hooks during forward pass (after activations computed)
+  - [x] 1.5.3 Call update hooks during optimizer step (before parameter update)
+- [x] 1.6 Add hook configuration to config system
+  - [x] 1.6.1 Add hook configuration section to config
+  - [x] 1.6.2 Support enabling/disabling hooks via config
+  - [x] 1.6.3 Support hook-specific parameters via config
+- [x] 1.7 Implement run logging with hook information
+  - [x] 1.7.1 Generate run_id for each training run
+  - [x] 1.7.2 Log git_commit hash
+  - [x] 1.7.3 Compute and log config_hash
+  - [x] 1.7.4 Log list of active hooks for each run
+
+## 2. Testing
+- [x] 2.1 Create `tests/test_hooks.py`
+- [x] 2.2 Test hook registry
+  - [x] 2.2.1 Test hook loading from config
+  - [x] 2.2.2 Test hook registration
+  - [x] 2.2.3 Test hook toggling (enable/disable)
+  - [x] 2.2.4 Test hook execution order
+- [x] 2.3 Test forward hooks
+  - [x] 2.3.1 Test forward hook produces correct activation stats (mean/std)
+  - [x] 2.3.2 Test forward hook doesn't change model outputs
+  - [x] 2.3.3 Test forward hook is called during training step
+- [x] 2.4 Test update hooks
+  - [x] 2.4.1 Test identity update hook doesn't change gradients
+  - [x] 2.4.2 Test update hook can transform gradients
+  - [x] 2.4.3 Test update hook is called during optimizer step
+- [x] 2.5 Test hook safety logging
+  - [x] 2.5.1 Test run_id is generated and logged
+  - [x] 2.5.2 Test git_commit is logged (or placeholder if not in git repo)
+  - [x] 2.5.3 Test config_hash is computed and logged
+  - [x] 2.5.4 Test hook_list is logged correctly
+- [x] 2.6 Test hooks don't break training
+  - [x] 2.6.1 Test training step completes with hooks enabled
+  - [x] 2.6.2 Test training step completes with hooks disabled
+  - [x] 2.6.3 Test multiple hooks can be active simultaneously
+
+## 3. Documentation & Cleanup
+- [x] 3.1 Add docstrings to all hook classes and functions
+- [x] 3.2 Update `src/hooks/__init__.py` to export public API
+- [x] 3.3 Update `src/training/__init__.py` if needed
+- [x] 3.4 Run all tests and verify they pass
+- [x] 3.5 Fix any linter errors
+- [x] 3.6 Verify code follows project style guidelines
+

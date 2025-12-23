@@ -4,8 +4,8 @@ This module provides a configuration system for managing training
 hyperparameters such as learning rate, weight decay, optimizer betas, etc.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -23,6 +23,16 @@ class TrainingConfig:
         batch_size: Batch size for training (default: 16).
         max_seq_len: Maximum sequence length (default: 256).
         seed: Random seed for reproducibility (default: None).
+        hooks: Hook configuration dictionary (default: None).
+            Expected format:
+            {
+                "forward": [
+                    {"name": "activation_stats", "enabled": True, ...}
+                ],
+                "update": [
+                    {"name": "identity", "enabled": True, ...}
+                ]
+            }
     """
     learning_rate: float = 3e-4
     weight_decay: float = 0.1
@@ -31,6 +41,7 @@ class TrainingConfig:
     batch_size: int = 16
     max_seq_len: int = 256
     seed: Optional[int] = None
+    hooks: Optional[Dict[str, List[Dict[str, Any]]]] = None
     
     @classmethod
     def from_dict(cls, config_dict: dict) -> "TrainingConfig":
@@ -46,7 +57,7 @@ class TrainingConfig:
         # Only use keys that are valid attributes
         valid_keys = {
             "learning_rate", "weight_decay", "beta1", "beta2",
-            "batch_size", "max_seq_len", "seed"
+            "batch_size", "max_seq_len", "seed", "hooks"
         }
         filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         return cls(**filtered_dict)
@@ -57,7 +68,7 @@ class TrainingConfig:
         Returns:
             Dictionary with all configuration parameters.
         """
-        return {
+        result = {
             "learning_rate": self.learning_rate,
             "weight_decay": self.weight_decay,
             "beta1": self.beta1,
@@ -66,4 +77,18 @@ class TrainingConfig:
             "max_seq_len": self.max_seq_len,
             "seed": self.seed,
         }
+        if self.hooks is not None:
+            result["hooks"] = self.hooks
+        return result
+    
+    def get_hooks_config(self) -> Dict[str, Any]:
+        """Get hooks configuration dictionary for HookRegistry.
+        
+        Returns:
+            Dictionary with "hooks" key containing hook definitions,
+            or empty dict if no hooks configured.
+        """
+        if self.hooks is None:
+            return {}
+        return {"hooks": self.hooks}
 

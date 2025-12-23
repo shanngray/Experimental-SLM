@@ -4,6 +4,10 @@ This module provides the Trainer class that orchestrates the training process,
 including forward pass, loss computation, backward pass, and optimizer updates.
 """
 
+import hashlib
+import json
+import subprocess
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +15,7 @@ import torch
 import torch.optim
 
 from src.config import TrainingConfig
+from src.hooks.registry import HookRegistry
 from src.tokenizer import Tokenizer
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.loss import compute_loss
@@ -47,13 +52,16 @@ class Trainer:
     
     Manages the training loop including forward pass, loss computation,
     backward pass, and optimizer updates. Tracks training step counter
-    and logs loss values.
+    and logs loss values. Supports hooks for experimental modifications.
     
     Attributes:
         model: The transformer model to train.
         optimizer: Optimizer for parameter updates.
         config: Training configuration with hyperparameters.
         step: Current training step counter.
+        hook_registry: Registry for managing training hooks.
+        run_id: Unique identifier for this training run.
+        _run_logged: Whether run metadata has been logged.
     """
     
     def __init__(
@@ -75,6 +83,14 @@ class Trainer:
         self.optimizer = optimizer
         self.config = config
         self.step = step
+        
+        # Initialize hook registry from config
+        hooks_config = config.get_hooks_config()
+        self.hook_registry = HookRegistry(hooks_config)
+        
+        # Generate run ID and log run metadata (only once)
+        self.run_id = str(uuid.uuid4())
+        self._run_logged = False
     
     @classmethod
     def from_checkpoint(
@@ -142,14 +158,75 @@ class Trainer:
             checkpoint_name=checkpoint_name
         )
     
+    def _log_run_metadata(self) -> None:
+        """Log run metadata including run_id, git_commit, config_hash, and hook_list.
+        
+        This is called once at the start of training to log reproducibility information.
+        """
+        if self._run_logged:
+            return
+        
+        # Get git commit hash
+        git_commit = self._get_git_commit()
+        
+        # Compute config hash
+        config_hash = self._compute_config_hash()
+        
+        # Get active hooks list
+        active_hooks = self.hook_registry.get_active_hooks()
+        hook_list = {
+            "forward": active_hooks.get("forward", []),
+            "update": active_hooks.get("update", []),
+        }
+        
+        # Log run metadata
+        print(f"[Run Metadata]")
+        print(f"  run_id: {self.run_id}")
+        print(f"  git_commit: {git_commit}")
+        print(f"  config_hash: {config_hash}")
+        print(f"  hook_list: {hook_list}")
+        
+        self._run_logged = True
+    
+    def _get_git_commit(self) -> str:
+        """Get current git commit hash.
+        
+        Returns:
+            Git commit hash, or "unknown" if not in a git repository.
+        """
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5
+            )
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            return "unknown"
+    
+    def _compute_config_hash(self) -> str:
+        """Compute hash of configuration for reproducibility.
+        
+        Returns:
+            SHA256 hash of the configuration as a hex string.
+        """
+        config_dict = self.config.to_dict()
+        # Sort keys for deterministic hashing
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()[:16]
+    
     def training_step(self, inputs: torch.Tensor) -> float:
         """Perform a single training step.
         
         Executes:
         1. Forward pass through the model
-        2. Loss computation (cross-entropy for next-token prediction)
-        3. Backward pass (gradient computation)
-        4. Optimizer step (parameter update)
+        2. Forward hooks (observe activations)
+        3. Loss computation (cross-entropy for next-token prediction)
+        4. Backward pass (gradient computation)
+        5. Update hooks (transform gradients)
+        6. Optimizer step (parameter update)
         
         For next-token prediction, targets are created by shifting inputs
         by one position: targets[:, i] = inputs[:, i+1] for i in [0, seq_len-2].
@@ -165,6 +242,10 @@ class Trainer:
         Raises:
             ValueError: If inputs tensor has incorrect shape or dtype.
         """
+        # Log run metadata on first step
+        if not self._run_logged:
+            self._log_run_metadata()
+        
         # Validate inputs
         if inputs.dim() != 2:
             raise ValueError(
@@ -189,12 +270,29 @@ class Trainer:
         # Forward pass
         logits = self.model(inputs)  # [B, seq_len, vocab_size]
         
+        # Call forward hooks with activations (logits)
+        self.hook_registry.call_forward_hooks(logits)
+        
         # Compute loss
         loss = compute_loss(logits, targets)
         
         # Backward pass
         self.optimizer.zero_grad()
         loss.backward()
+        
+        # Collect gradients for update hooks
+        gradients = {}
+        for name, param in self.model.named_parameters():
+            if param.grad is not None:
+                gradients[name] = param.grad.clone()
+        
+        # Call update hooks to transform gradients
+        transformed_gradients = self.hook_registry.call_update_hooks(gradients)
+        
+        # Apply transformed gradients back to model parameters
+        for name, param in self.model.named_parameters():
+            if name in transformed_gradients:
+                param.grad = transformed_gradients[name]
         
         # Optimizer step
         self.optimizer.step()
