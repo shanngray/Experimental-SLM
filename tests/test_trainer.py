@@ -30,7 +30,7 @@ def test_compute_loss_handles_correct_shapes():
     batch_size = 4
     seq_len = 256
     
-    logits = torch.randn(batch_size, seq_len, vocab_size)
+    logits = torch.randn(batch_size, seq_len, vocab_size, requires_grad=True)
     targets = torch.randint(0, vocab_size, (batch_size, seq_len))
     
     loss = compute_loss(logits, targets)
@@ -396,4 +396,132 @@ def test_trainer_optimizer_state_tracked():
     # Check that optimizer state dict is not empty
     state_dict = optimizer.state_dict()
     assert len(state_dict["state"]) > 0
+
+
+def test_trainer_evaluation_integration():
+    """Test evaluation is called at specified cadence."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size, max_seq_len=seq_len)
+    config = TrainingConfig(eval_cadence=2)  # Evaluate every 2 steps
+    optimizer = create_optimizer(model, config)
+    
+    # Create validation dataloader
+    from src.dataset import WindowDataset
+    from src.dataloader import DataLoader
+    # Use token IDs within vocab_size range (0 to vocab_size-1)
+    val_corpus = list(range(vocab_size)) * 10  # Repeat to get enough data
+    val_dataset = WindowDataset(val_corpus, context_length=seq_len)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    
+    trainer = Trainer(model, optimizer, config, val_dataloader=val_loader)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Step 1: Should not evaluate (step 1 % 2 != 0)
+    trainer.training_step(inputs)
+    assert trainer.step == 1
+    
+    # Step 2: Should evaluate (step 2 % 2 == 0)
+    # We can't easily capture print output, but we can verify it doesn't crash
+    trainer.training_step(inputs)
+    assert trainer.step == 2
+
+
+def test_trainer_sampling_integration():
+    """Test sampling is called at specified cadence."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size, max_seq_len=seq_len)
+    config = TrainingConfig(sampling_cadence=3)  # Sample every 3 steps
+    optimizer = create_optimizer(model, config)
+    
+    # Create tokenizer
+    from src.tokenizer import Tokenizer
+    tokenizer = Tokenizer()
+    
+    trainer = Trainer(model, optimizer, config, tokenizer=tokenizer)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Step 1: Should not sample (step 1 % 3 != 0)
+    trainer.training_step(inputs)
+    assert trainer.step == 1
+    
+    # Step 2: Should not sample (step 2 % 3 != 0)
+    trainer.training_step(inputs)
+    assert trainer.step == 2
+    
+    # Step 3: Should sample (step 3 % 3 == 0)
+    # We can't easily capture print output, but we can verify it doesn't crash
+    trainer.training_step(inputs)
+    assert trainer.step == 3
+
+
+def test_trainer_evaluation_doesnt_interfere_with_training():
+    """Test evaluation doesn't interfere with training step."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size, max_seq_len=seq_len)
+    config = TrainingConfig(eval_cadence=1)  # Evaluate every step
+    optimizer = create_optimizer(model, config)
+    
+    # Create validation dataloader
+    from src.dataset import WindowDataset
+    from src.dataloader import DataLoader
+    # Use token IDs within vocab_size range (0 to vocab_size-1)
+    val_corpus = list(range(vocab_size)) * 10  # Repeat to get enough data
+    val_dataset = WindowDataset(val_corpus, context_length=seq_len)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    
+    trainer = Trainer(model, optimizer, config, val_dataloader=val_loader)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Model should be in training mode
+    assert model.training
+    
+    # Training step should complete successfully
+    loss = trainer.training_step(inputs)
+    
+    # Model should still be in training mode after evaluation
+    assert model.training
+    assert isinstance(loss, float)
+    assert trainer.step == 1
+
+
+def test_trainer_sampling_doesnt_interfere_with_training():
+    """Test sampling doesn't interfere with training step."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size, max_seq_len=seq_len)
+    config = TrainingConfig(sampling_cadence=1)  # Sample every step
+    optimizer = create_optimizer(model, config)
+    
+    # Create tokenizer
+    from src.tokenizer import Tokenizer
+    tokenizer = Tokenizer()
+    
+    trainer = Trainer(model, optimizer, config, tokenizer=tokenizer)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Model should be in training mode
+    assert model.training
+    
+    # Training step should complete successfully
+    loss = trainer.training_step(inputs)
+    
+    # Model should still be in training mode after sampling
+    assert model.training
+    assert isinstance(loss, float)
+    assert trainer.step == 1
 

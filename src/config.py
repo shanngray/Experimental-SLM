@@ -33,6 +33,14 @@ class TrainingConfig:
                     {"name": "identity", "enabled": True, ...}
                 ]
             }
+        eval_cadence: Evaluation cadence in steps (default: None, disabled).
+            If set, validation loss is computed every N steps.
+        sampling_cadence: Sampling cadence in steps (default: None, disabled).
+            If set, text samples are generated every N steps.
+        sampling_temperature: Temperature for text sampling (default: 1.0).
+        sampling_prompt: Fixed prompt for text sampling (default: "The").
+        sampling_max_length: Maximum number of tokens to generate (default: 100).
+        sampling_seed: Random seed for sampling reproducibility (default: 42).
     """
     learning_rate: float = 3e-4
     weight_decay: float = 0.1
@@ -42,6 +50,12 @@ class TrainingConfig:
     max_seq_len: int = 256
     seed: Optional[int] = None
     hooks: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    eval_cadence: Optional[int] = None
+    sampling_cadence: Optional[int] = None
+    sampling_temperature: float = 1.0
+    sampling_prompt: str = "The"
+    sampling_max_length: int = 100
+    sampling_seed: int = 42
     
     @classmethod
     def from_dict(cls, config_dict: dict) -> "TrainingConfig":
@@ -57,7 +71,9 @@ class TrainingConfig:
         # Only use keys that are valid attributes
         valid_keys = {
             "learning_rate", "weight_decay", "beta1", "beta2",
-            "batch_size", "max_seq_len", "seed", "hooks"
+            "batch_size", "max_seq_len", "seed", "hooks",
+            "eval_cadence", "sampling_cadence", "sampling_temperature",
+            "sampling_prompt", "sampling_max_length", "sampling_seed"
         }
         filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         return cls(**filtered_dict)
@@ -76,6 +92,12 @@ class TrainingConfig:
             "batch_size": self.batch_size,
             "max_seq_len": self.max_seq_len,
             "seed": self.seed,
+            "eval_cadence": self.eval_cadence,
+            "sampling_cadence": self.sampling_cadence,
+            "sampling_temperature": self.sampling_temperature,
+            "sampling_prompt": self.sampling_prompt,
+            "sampling_max_length": self.sampling_max_length,
+            "sampling_seed": self.sampling_seed,
         }
         if self.hooks is not None:
             result["hooks"] = self.hooks

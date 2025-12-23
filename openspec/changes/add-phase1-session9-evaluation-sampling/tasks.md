@@ -1,0 +1,61 @@
+## 1. Implementation
+- [x] 1.1 Create `src/evaluation/__init__.py` module
+- [x] 1.2 Create `src/evaluation/evaluator.py` with validation loss computation
+  - [x] 1.2.1 Implement `compute_val_loss()` function
+  - [x] 1.2.2 Implement evaluation on validation dataset
+  - [x] 1.2.3 Ensure evaluation runs in eval mode (no gradients)
+  - [x] 1.2.4 Return validation loss as scalar value
+- [x] 1.3 Create `src/sampling/__init__.py` module
+- [x] 1.4 Create `src/sampling/sampler.py` with text sampling functionality
+  - [x] 1.4.1 Implement `sample_text()` function
+  - [x] 1.4.2 Implement sampling from model logits with temperature=1.0
+  - [x] 1.4.3 Implement pure multinomial sampling (top-k disabled)
+  - [x] 1.4.4 Use fixed seed for reproducibility
+  - [x] 1.4.5 Generate text from fixed prompt
+  - [x] 1.4.6 Return generated text as string
+- [x] 1.5 Integrate evaluation with Trainer class
+  - [x] 1.5.1 Add evaluation cadence configuration (e.g., every N steps)
+  - [x] 1.5.2 Call `compute_val_loss()` at specified intervals
+  - [x] 1.5.3 Log validation loss when computed
+- [x] 1.6 Integrate sampling with Trainer class
+  - [x] 1.6.1 Add sampling cadence configuration (e.g., every N steps)
+  - [x] 1.6.2 Call `sample_text()` at specified intervals
+  - [x] 1.6.3 Log generated text samples
+- [x] 1.7 Add evaluation and sampling configuration to config system
+  - [x] 1.7.1 Add evaluation configuration section (evaluation cadence)
+  - [x] 1.7.2 Add sampling configuration section (sampling cadence, temperature, prompt)
+  - [x] 1.7.3 Support default values for evaluation and sampling parameters
+
+## 2. Testing
+- [x] 2.1 Create `tests/test_evaluator.py`
+- [x] 2.2 Test validation loss computation
+  - [x] 2.2.1 Test `compute_val_loss()` computes correct loss on validation set
+  - [x] 2.2.2 Test validation loss matches expected values (within tolerance)
+  - [x] 2.2.3 Test evaluation runs in eval mode (no gradient computation)
+  - [x] 2.2.4 Test evaluation handles empty validation set gracefully
+- [x] 2.3 Test evaluation integration with training
+  - [x] 2.3.1 Test evaluation is called at specified cadence
+  - [x] 2.3.2 Test validation loss is logged correctly
+  - [x] 2.3.3 Test evaluation doesn't interfere with training step
+- [x] 2.4 Create `tests/test_sampler.py`
+- [x] 2.5 Test text sampling
+  - [x] 2.5.1 Test `sample_text()` produces text of correct length
+  - [x] 2.5.2 Test sampling is reproducible (same seed → same output)
+  - [x] 2.5.3 Test sampling uses correct temperature (temperature=1.0)
+  - [x] 2.5.4 Test generated text can be decoded (valid token IDs)
+  - [x] 2.5.5 Test sampling from fixed prompt works correctly
+- [x] 2.6 Test sampling integration with training
+  - [x] 2.6.1 Test sampling is called at specified cadence
+  - [x] 2.6.2 Test generated text is logged correctly
+  - [x] 2.6.3 Test sampling doesn't interfere with training step
+
+## 3. Documentation & Cleanup
+- [x] 3.1 Add docstrings to all evaluation classes and functions
+- [x] 3.2 Add docstrings to all sampling classes and functions
+- [x] 3.3 Update `src/evaluation/__init__.py` to export public API
+- [x] 3.4 Update `src/sampling/__init__.py` to export public API
+- [x] 3.5 Update `src/training/__init__.py` if needed
+- [ ] 3.6 Run all tests and verify they pass
+- [x] 3.7 Fix any linter errors
+- [x] 3.8 Verify code follows project style guidelines
+

@@ -15,6 +15,7 @@ import torch
 import torch.optim
 
 from src.config import TrainingConfig
+from src.dataloader import DataLoader
 from src.hooks.registry import HookRegistry
 from src.tokenizer import Tokenizer
 from src.training.checkpoint import load_checkpoint, save_checkpoint
@@ -62,6 +63,8 @@ class Trainer:
         hook_registry: Registry for managing training hooks.
         run_id: Unique identifier for this training run.
         _run_logged: Whether run metadata has been logged.
+        val_dataloader: Optional validation dataloader for evaluation.
+        tokenizer: Optional tokenizer for text sampling.
     """
     
     def __init__(
@@ -69,7 +72,9 @@ class Trainer:
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         config: TrainingConfig,
-        step: int = 0
+        step: int = 0,
+        val_dataloader: Optional[DataLoader] = None,
+        tokenizer: Optional[Tokenizer] = None
     ):
         """Initialize the Trainer.
         
@@ -78,11 +83,15 @@ class Trainer:
             optimizer: Optimizer for parameter updates (e.g., AdamW).
             config: Training configuration with hyperparameters.
             step: Initial training step counter (default: 0). Used when resuming.
+            val_dataloader: Optional validation dataloader for evaluation.
+            tokenizer: Optional tokenizer for text sampling.
         """
         self.model = model
         self.optimizer = optimizer
         self.config = config
         self.step = step
+        self.val_dataloader = val_dataloader
+        self.tokenizer = tokenizer
         
         # Initialize hook registry from config
         hooks_config = config.get_hooks_config()
@@ -303,6 +312,29 @@ class Trainer:
         # Log loss
         loss_value = loss.item()
         print(f"Step {self.step}: loss = {loss_value:.4f}")
+        
+        # Perform evaluation if cadence is configured
+        if self.config.eval_cadence is not None and self.val_dataloader is not None:
+            if self.step % self.config.eval_cadence == 0:
+                # Import here to avoid circular import
+                from src.evaluation import compute_val_loss
+                val_loss = compute_val_loss(self.model, self.val_dataloader)
+                print(f"Step {self.step}: val_loss = {val_loss:.4f}")
+        
+        # Perform sampling if cadence is configured
+        if self.config.sampling_cadence is not None and self.tokenizer is not None:
+            if self.step % self.config.sampling_cadence == 0:
+                # Import here to avoid circular import
+                from src.sampling import sample_text
+                generated_text = sample_text(
+                    model=self.model,
+                    tokenizer=self.tokenizer,
+                    prompt=self.config.sampling_prompt,
+                    max_length=self.config.sampling_max_length,
+                    temperature=self.config.sampling_temperature,
+                    seed=self.config.sampling_seed
+                )
+                print(f"Step {self.step}: sample = {generated_text!r}")
         
         return loss_value
 
