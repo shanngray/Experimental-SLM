@@ -525,3 +525,166 @@ def test_trainer_sampling_doesnt_interfere_with_training():
     assert isinstance(loss, float)
     assert trainer.step == 1
 
+
+def test_training_config_new_hyperparameters_defaults():
+    """Test TrainingConfig includes new hyperparameters with correct defaults."""
+    config = TrainingConfig()
+    
+    # Model architecture defaults
+    assert config.n_layers == 4
+    assert config.d_model == 256
+    assert config.n_heads == 4
+    assert config.d_ff == 1024
+    assert config.dropout == 0.1
+    
+    # Dataset defaults
+    assert config.train_ratio == 0.95
+    
+    # Training loop defaults
+    assert config.max_steps == 10000
+    assert config.checkpoint_cadence == 1000
+
+
+def test_training_config_from_dict_with_new_fields():
+    """Test TrainingConfig.from_dict correctly loads new hyperparameters."""
+    config_dict = {
+        "n_layers": 6,
+        "d_model": 512,
+        "n_heads": 8,
+        "d_ff": 2048,
+        "dropout": 0.2,
+        "train_ratio": 0.9,
+        "max_steps": 5000,
+        "checkpoint_cadence": 500,
+        "learning_rate": 1e-3,
+    }
+    
+    config = TrainingConfig.from_dict(config_dict)
+    
+    assert config.n_layers == 6
+    assert config.d_model == 512
+    assert config.n_heads == 8
+    assert config.d_ff == 2048
+    assert config.dropout == 0.2
+    assert config.train_ratio == 0.9
+    assert config.max_steps == 5000
+    assert config.checkpoint_cadence == 500
+    assert config.learning_rate == 1e-3
+    # Verify defaults still work for missing fields
+    assert config.weight_decay == 0.1  # Default
+
+
+def test_training_config_from_dict_missing_new_fields():
+    """Test backward compatibility: missing new fields use defaults."""
+    config_dict = {
+        "learning_rate": 1e-3,
+        "batch_size": 32,
+    }
+    
+    config = TrainingConfig.from_dict(config_dict)
+    
+    # Old fields work
+    assert config.learning_rate == 1e-3
+    assert config.batch_size == 32
+    
+    # New fields use defaults
+    assert config.n_layers == 4
+    assert config.d_model == 256
+    assert config.n_heads == 4
+    assert config.d_ff == 1024
+    assert config.dropout == 0.1
+    assert config.train_ratio == 0.95
+    assert config.max_steps == 10000
+    assert config.checkpoint_cadence == 1000
+
+
+def test_training_config_to_dict_includes_new_fields():
+    """Test TrainingConfig.to_dict includes all new hyperparameters."""
+    config = TrainingConfig(
+        n_layers=6,
+        d_model=512,
+        n_heads=8,
+        dropout=0.2,
+        train_ratio=0.9,
+        max_steps=5000,
+        checkpoint_cadence=500
+    )
+    
+    config_dict = config.to_dict()
+    
+    assert config_dict["n_layers"] == 6
+    assert config_dict["d_model"] == 512
+    assert config_dict["n_heads"] == 8
+    assert config_dict["d_ff"] == 1024  # Default
+    assert config_dict["dropout"] == 0.2
+    assert config_dict["train_ratio"] == 0.9
+    assert config_dict["max_steps"] == 5000
+    assert config_dict["checkpoint_cadence"] == 500
+    # Verify old fields still present
+    assert "learning_rate" in config_dict
+    assert "batch_size" in config_dict
+
+
+def test_training_config_validation_d_model_divisible_by_n_heads():
+    """Test validation: d_model must be divisible by n_heads."""
+    with pytest.raises(ValueError, match="d_model.*must be divisible by n_heads"):
+        TrainingConfig(d_model=256, n_heads=5)  # 256 % 5 != 0
+
+
+def test_training_config_validation_dropout_range():
+    """Test validation: dropout must be between 0.0 and 1.0."""
+    with pytest.raises(ValueError, match="dropout.*must be between 0.0 and 1.0"):
+        TrainingConfig(dropout=1.5)
+    
+    with pytest.raises(ValueError, match="dropout.*must be between 0.0 and 1.0"):
+        TrainingConfig(dropout=-0.1)
+
+
+def test_training_config_validation_train_ratio_range():
+    """Test validation: train_ratio must be between 0.0 and 1.0 (exclusive)."""
+    with pytest.raises(ValueError, match="train_ratio.*must be between 0.0 and 1.0"):
+        TrainingConfig(train_ratio=1.0)
+    
+    with pytest.raises(ValueError, match="train_ratio.*must be between 0.0 and 1.0"):
+        TrainingConfig(train_ratio=0.0)
+    
+    with pytest.raises(ValueError, match="train_ratio.*must be between 0.0 and 1.0"):
+        TrainingConfig(train_ratio=1.5)
+
+
+def test_training_config_validation_max_steps_positive():
+    """Test validation: max_steps must be positive."""
+    with pytest.raises(ValueError, match="max_steps.*must be positive"):
+        TrainingConfig(max_steps=0)
+    
+    with pytest.raises(ValueError, match="max_steps.*must be positive"):
+        TrainingConfig(max_steps=-1)
+
+
+def test_training_config_validation_checkpoint_cadence():
+    """Test validation: checkpoint_cadence must be positive or None."""
+    with pytest.raises(ValueError, match="checkpoint_cadence.*must be positive or None"):
+        TrainingConfig(checkpoint_cadence=0)
+    
+    with pytest.raises(ValueError, match="checkpoint_cadence.*must be positive or None"):
+        TrainingConfig(checkpoint_cadence=-1)
+    
+    # None should be valid
+    config = TrainingConfig(checkpoint_cadence=None)
+    assert config.checkpoint_cadence is None
+
+
+def test_training_config_validation_positive_integers():
+    """Test validation: architecture parameters must be positive."""
+    with pytest.raises(ValueError, match="n_layers.*must be positive"):
+        TrainingConfig(n_layers=0)
+    
+    with pytest.raises(ValueError, match="d_model.*must be positive"):
+        TrainingConfig(d_model=0)
+    
+    with pytest.raises(ValueError, match="n_heads.*must be positive"):
+        TrainingConfig(n_heads=0)
+    
+    with pytest.raises(ValueError, match="d_ff.*must be positive"):
+        TrainingConfig(d_ff=0)
+
