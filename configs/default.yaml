@@ -1,0 +1,135 @@
+# Default Training Configuration
+# This file contains all available hyperparameters with their default values.
+# Use this as a reference when creating custom configurations.
+
+# ============================================================================
+# Model Architecture Hyperparameters
+# ============================================================================
+# These control the structure and size of the transformer model.
+
+n_layers: 4  # Number of transformer blocks. Controls model depth.
+             # More layers increase capacity but slow training/inference.
+             # Typical range: 2-12 for small models, 12-96+ for large models.
+             # Default: 4
+
+d_model: 256  # Model dimension / embedding size. Controls the width of the model.
+              # Must be divisible by n_heads.
+              # Typical range: 128-2048+ depending on model size.
+              # Default: 256
+
+n_heads: 4  # Number of attention heads. Controls multi-head attention.
+            # Must divide d_model evenly.
+            # Typical range: 2-32+ depending on d_model.
+            # Default: 4
+
+d_ff: 1024  # Feed-forward network dimension. Controls the width of the MLP layers.
+            # Typically 4x d_model.
+            # Default: 1024
+
+dropout: 0.1  # Dropout probability. Applied to attention and MLP layers for regularization.
+              # Constraint: 0.0 <= dropout <= 1.0
+              # Default: 0.1
+
+# ============================================================================
+# Dataset Hyperparameters
+# ============================================================================
+# These control how the training data is split and processed.
+
+train_ratio: 0.95  # Fraction of data to use for training.
+                   # Remaining fraction (1 - train_ratio) is used for validation.
+                   # Constraint: 0.0 < train_ratio < 1.0
+                   # Default: 0.95
+
+max_seq_len: 256  # Maximum sequence length (context window).
+                  # Longer sequences allow the model to see more context but use more memory.
+                  # Default: 256
+
+# ============================================================================
+# Training Loop Hyperparameters
+# ============================================================================
+# These control the training process itself.
+
+max_steps: 10000  # Maximum number of training steps. Training stops after this many steps.
+                  # Must be a positive integer.
+                  # Default: 10000
+
+checkpoint_cadence: 1000  # Steps between checkpoint saves.
+                          # If null, checkpointing is disabled.
+                          # Must be positive integer or null.
+                          # Default: 1000
+
+# ============================================================================
+# Optimizer Hyperparameters
+# ============================================================================
+# These control the AdamW optimizer behavior.
+
+learning_rate: 3.0e-4  # Learning rate for optimizer.
+                       # Common range: 1e-5 to 1e-3
+                       # Default: 3.0e-4
+
+weight_decay: 0.1  # Weight decay for L2 regularization.
+                   # Helps prevent overfitting.
+                   # Default: 0.1
+
+beta1: 0.9  # First momentum coefficient for AdamW.
+            # Controls exponential decay rate for first moment estimates.
+            # Default: 0.9
+
+beta2: 0.95  # Second momentum coefficient for AdamW.
+             # Controls exponential decay rate for second moment estimates.
+             # Default: 0.95
+
+batch_size: 16  # Batch size for training.
+                # Larger batches use more memory but provide more stable gradients.
+                # Default: 16
+
+# ============================================================================
+# Evaluation and Sampling Hyperparameters
+# ============================================================================
+# These control when and how the model is evaluated and sampled during training.
+
+eval_cadence: null  # Evaluation cadence in steps.
+                    # If set, validation loss is computed every N steps.
+                    # If null, evaluation is disabled.
+                    # Default: null (disabled)
+
+sampling_cadence: null  # Sampling cadence in steps.
+                        # If set, text samples are generated every N steps.
+                        # If null, sampling is disabled.
+                        # Default: null (disabled)
+
+sampling_temperature: 1.0  # Temperature for text sampling.
+                           # Lower values (0.1-0.5) make output more deterministic.
+                           # Higher values (1.0-2.0) make output more creative/random.
+                           # Default: 1.0
+
+sampling_prompt: "The"  # Fixed prompt for text sampling.
+                        # The model will generate text starting from this prompt.
+                        # Default: "The"
+
+sampling_max_length: 100  # Maximum number of tokens to generate during sampling.
+                          # Default: 100
+
+sampling_seed: 42  # Random seed for sampling reproducibility.
+                   # Set to null for non-deterministic sampling.
+                   # Default: 42
+
+# ============================================================================
+# Other Hyperparameters
+# ============================================================================
+
+seed: null  # Random seed for reproducibility.
+            # Set to null for non-deterministic training.
+            # Default: null
+
+hooks: null  # Hook configuration dictionary.
+             # Format:
+             #   forward:
+             #     - name: "activation_stats"
+             #       enabled: true
+             #   update:
+             #     - name: "identity"
+             #       enabled: true
+             # If null, no hooks are registered.
+             # Default: null
+

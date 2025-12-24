@@ -1,0 +1,43 @@
+# Fast Training Configuration
+# This configuration prioritizes faster training over model quality.
+# Use this when you want to quickly iterate on experiments or have limited time.
+#
+# Trade-offs:
+# - Faster training completion
+# - May sacrifice some model quality
+# - Useful for rapid prototyping
+
+# Model Architecture - Default size
+n_layers: 4
+d_model: 256
+n_heads: 4
+d_ff: 1024
+dropout: 0.1
+
+# Dataset
+train_ratio: 0.95
+max_seq_len: 256
+
+# Training Loop - Fewer steps and less frequent checkpointing
+max_steps: 5000  # Fewer steps for faster completion
+checkpoint_cadence: 2000  # Less frequent checkpointing to save time
+
+# Optimizer - Larger batch size for faster training
+learning_rate: 3.0e-4
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+batch_size: 32  # Larger batch size for faster training (more samples per step)
+
+# Evaluation and Sampling - Disabled for speed
+eval_cadence: null  # Disabled to save computation time
+sampling_cadence: null  # Disabled to save computation time
+sampling_temperature: 1.0
+sampling_prompt: "The"
+sampling_max_length: 100
+sampling_seed: 42
+
+# Other
+seed: null
+hooks: null
+
