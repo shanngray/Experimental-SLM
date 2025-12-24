@@ -1,0 +1,78 @@
+## 1. Implementation
+- [x] 1.1 Implement configuration loading
+  - [x] 1.1.1 Add simple YAML loader function (or use existing if present)
+  - [x] 1.1.2 Create TrainingConfig from YAML or use defaults
+  - [x] 1.1.3 Merge command-line overrides (--max-steps) with config
+- [x] 1.2 Implement data loading and tokenization
+  - [x] 1.2.1 Load text data from file (default: `data/uni-alg-int.txt` or first file in `data/`)
+  - [x] 1.2.2 Initialize Tokenizer and tokenize corpus
+  - [x] 1.2.3 Split corpus into train/val sets using `split_corpus()` (95%/5%)
+- [x] 1.3 Create datasets and dataloaders
+  - [x] 1.3.1 Create WindowDataset for train and val corpora
+  - [x] 1.3.2 Create DataLoader instances with batch_size from config
+- [x] 1.4 Initialize model and optimizer
+  - [x] 1.4.1 Create Transformer model with vocab_size and config parameters
+  - [x] 1.4.2 Create AdamW optimizer using `create_optimizer()`
+- [x] 1.5 Initialize trainer (or resume from checkpoint)
+  - [x] 1.5.1 If --resume provided: load checkpoint using `Trainer.from_checkpoint()`
+  - [x] 1.5.2 Otherwise: create new Trainer with model, optimizer, config, val_dataloader, tokenizer
+- [x] 1.6 Implement training loop
+  - [x] 1.6.1 Iterate over training batches from DataLoader
+  - [x] 1.6.2 Call `trainer.training_step(batch)` for each batch
+  - [x] 1.6.3 Stop when max_steps reached
+  - [x] 1.6.4 Save checkpoint periodically (e.g., every 1000 steps or at end)
+  - [x] 1.6.5 Handle KeyboardInterrupt: save checkpoint before exit
+- [x] 1.7 Add command-line argument parsing
+  - [x] 1.7.1 Parse --resume, --config, --data, --max-steps arguments
+  - [x] 1.7.2 Display usage/help message for --help
+- [x] 1.8 Add basic error handling
+  - [x] 1.8.1 Handle missing data file
+  - [x] 1.8.2 Handle invalid checkpoint path
+  - [x] 1.8.3 Handle invalid config file
+- [x] 1.9 Verify and enhance logging (Session 10 requirement)
+  - [x] 1.9.1 Verify Trainer logs all required fields: run_id, config_hash, git_commit, step, loss, val_loss, sample_text
+  - [x] 1.9.2 Ensure log format is parseable (structured text or JSON-like)
+  - [x] 1.9.3 Add any missing log formatting if needed in main.py
+
+## 2. Integration Testing (Session 10 Requirements)
+- [x] 2.1 Create `tests/test_integration.py` (end-to-end integration tests)
+- [x] 2.2 Test full training pipeline
+  - [x] 2.2.1 Test end-to-end: tiny corpus → train → checkpoint → resume → verify
+  - [x] 2.2.2 Test training runs for specified steps on small dataset
+  - [x] 2.2.3 Test checkpoint is saved correctly
+  - [x] 2.2.4 Test resume from checkpoint works
+  - [x] 2.2.5 Test checkpoint/resume produces identical loss progression
+- [x] 2.3 Test reproducibility
+  - [x] 2.3.1 Test same seed → same results (deterministic)
+  - [x] 2.3.2 Test multiple runs with same config produce identical loss values
+- [x] 2.4 Test training dynamics (smoke tests)
+  - [x] 2.4.1 Test loss decreases over time on simple data
+  - [x] 2.4.2 Test generated samples improve qualitatively (basic check)
+- [x] 2.5 Test logging completeness
+  - [x] 2.5.1 Verify logging includes: run_id, config_hash, git_commit, step, loss
+  - [x] 2.5.2 Verify val_loss is logged when eval_cadence triggers
+  - [x] 2.5.3 Verify sample_text is logged when sampling_cadence triggers
+  - [x] 2.5.4 Verify log format is parseable (structured text or JSON)
+- [x] 2.6 Test command-line interface
+  - [x] 2.6.1 Test --resume argument
+  - [x] 2.6.2 Test --config argument (if YAML loader implemented)
+  - [x] 2.6.3 Test --data argument
+  - [x] 2.6.4 Test --max-steps argument
+  - [x] 2.6.5 Test error handling for invalid arguments/files
+- [x] 2.7 Test KeyboardInterrupt handling
+  - [x] 2.7.1 Test that checkpoint is saved on interrupt
+  - [x] 2.7.2 Test that training can resume from interrupt checkpoint
+
+## 3. Documentation & Cleanup (Session 10 Polish)
+- [x] 3.1 Add comprehensive docstrings to main.py functions
+- [x] 3.2 Add usage examples in docstrings
+- [x] 3.3 Verify README.md examples work with new main.py
+- [x] 3.4 Update README.md if needed to reflect actual CLI interface
+- [x] 3.5 Document how to run training, resume, and modify config
+- [x] 3.6 Ensure all docstrings are complete across the codebase
+- [x] 3.7 Run all tests (unit + integration) and verify they pass
+- [x] 3.8 Fix any linter errors
+- [x] 3.9 Verify code follows project style guidelines
+- [x] 3.10 Verify codebase is clean and well-organized
+- [x] 3.11 Update phase1-checklist.md with completion status
+

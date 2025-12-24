@@ -60,6 +60,7 @@ def test_save_checkpoint_creates_files():
         # Check all required files exist
         assert (checkpoint_path / "model.pt").exists()
         assert (checkpoint_path / "optimizer.pt").exists()
+        assert (checkpoint_path / "rng.pt").exists()
         assert (checkpoint_path / "vocab.json").exists()
         assert (checkpoint_path / "metadata.json").exists()
 
@@ -648,6 +649,8 @@ def test_trainer_save_checkpoint():
         # Verify checkpoint was created
         assert checkpoint_path.exists()
         assert (checkpoint_path / "model.pt").exists()
+        assert (checkpoint_path / "optimizer.pt").exists()
+        assert (checkpoint_path / "rng.pt").exists()
         assert (checkpoint_path / "metadata.json").exists()
         
         # Verify step is saved correctly

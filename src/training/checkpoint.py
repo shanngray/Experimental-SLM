@@ -2,10 +2,12 @@
 
 This module provides functions to save and load complete training state,
 including model weights, optimizer state, training configuration, vocabulary,
-and step counter. This enables resuming training from any saved checkpoint.
+step counter, and random number generator states. This enables resuming 
+training from any saved checkpoint with full reproducibility.
 """
 
 import json
+import random
 from pathlib import Path
 from typing import Optional
 
@@ -27,8 +29,9 @@ def save_checkpoint(
     """Save complete training state to disk.
     
     Saves model state_dict, optimizer state_dict, training configuration,
-    vocabulary, and step counter to a checkpoint directory. Uses PyTorch
-    format (torch.save) for binary weights and JSON format for metadata.
+    vocabulary, step counter, and RNG states to a checkpoint directory. 
+    Uses PyTorch format (torch.save) for binary data and JSON format for metadata.
+    This ensures full reproducibility when resuming training.
     
     Args:
         model: The transformer model to save.
@@ -62,6 +65,17 @@ def save_checkpoint(
     optimizer_path = checkpoint_path / "optimizer.pt"
     torch.save(optimizer.state_dict(), optimizer_path)
     
+    # Save RNG states (binary PyTorch format)
+    rng_path = checkpoint_path / "rng.pt"
+    rng_state = {
+        "python_rng_state": random.getstate(),
+        "torch_rng_state": torch.get_rng_state(),
+    }
+    # Save CUDA RNG state if CUDA is available and being used
+    if torch.cuda.is_available() and torch.cuda.is_initialized():
+        rng_state["cuda_rng_state"] = torch.cuda.get_rng_state_all()
+    torch.save(rng_state, rng_path)
+    
     # Save vocabulary (JSON format)
     vocab_path = checkpoint_path / "vocab.json"
     tokenizer.save_vocab(vocab_path)
@@ -87,7 +101,8 @@ def load_checkpoint(
     """Load complete training state from disk.
     
     Loads model state_dict, optimizer state_dict, training configuration,
-    vocabulary, and step counter from a checkpoint directory.
+    vocabulary, step counter, and RNG states from a checkpoint directory.
+    This restores the exact training state for full reproducibility.
     
     Args:
         checkpoint_path: Path to checkpoint directory.
@@ -102,6 +117,9 @@ def load_checkpoint(
             - "model": torch.nn.Module - Model (same reference as input)
             - "optimizer": torch.optim.Optimizer - Optimizer (same reference as input)
             - "tokenizer": Tokenizer - Tokenizer (same reference as input)
+    
+    Note:
+        This function also restores Python and PyTorch RNG states as a side effect.
     
     Raises:
         FileNotFoundError: If checkpoint files are missing.
@@ -143,6 +161,28 @@ def load_checkpoint(
     except Exception as e:
         raise RuntimeError(
             f"Failed to load optimizer checkpoint from {optimizer_path}: {e}"
+        ) from e
+    
+    # Load RNG states
+    rng_path = checkpoint_path / "rng.pt"
+    if not rng_path.exists():
+        raise FileNotFoundError(
+            f"RNG state checkpoint file not found: {rng_path}"
+        )
+    try:
+        rng_state = torch.load(rng_path, map_location="cpu")
+        # Restore Python RNG state
+        if "python_rng_state" in rng_state:
+            random.setstate(rng_state["python_rng_state"])
+        # Restore PyTorch CPU RNG state
+        if "torch_rng_state" in rng_state:
+            torch.set_rng_state(rng_state["torch_rng_state"])
+        # Restore CUDA RNG state if present
+        if "cuda_rng_state" in rng_state and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(rng_state["cuda_rng_state"])
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load RNG state checkpoint from {rng_path}: {e}"
         ) from e
     
     # Load vocabulary
@@ -194,4 +234,57 @@ def load_checkpoint(
         "optimizer": optimizer,
         "tokenizer": tokenizer,
     }
+
+
+def load_checkpoint_config(
+    checkpoint_path: str | Path
+) -> TrainingConfig:
+    """Load only the training configuration from a checkpoint.
+    
+    Useful when you need to create an optimizer with the exact same
+    configuration that was used to save the checkpoint.
+    
+    Args:
+        checkpoint_path: Path to checkpoint directory.
+    
+    Returns:
+        TrainingConfig loaded from the checkpoint.
+    
+    Raises:
+        FileNotFoundError: If checkpoint files are missing.
+        RuntimeError: If checkpoint files are corrupted or invalid.
+    """
+    checkpoint_path = Path(checkpoint_path)
+    
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(
+            f"Checkpoint directory not found: {checkpoint_path}"
+        )
+    
+    if not checkpoint_path.is_dir():
+        raise FileNotFoundError(
+            f"Checkpoint path is not a directory: {checkpoint_path}"
+        )
+    
+    # Load metadata
+    metadata_path = checkpoint_path / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"Metadata checkpoint file not found: {metadata_path}"
+        )
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load metadata checkpoint from {metadata_path}: {e}"
+        ) from e
+    
+    config_dict = metadata.get("config")
+    if config_dict is None:
+        raise RuntimeError(
+            f"Config not found in metadata: {metadata_path}"
+        )
+    
+    return TrainingConfig.from_dict(config_dict)
 

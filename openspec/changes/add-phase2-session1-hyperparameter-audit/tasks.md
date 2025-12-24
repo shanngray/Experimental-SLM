@@ -1,0 +1,87 @@
+## 1. Codebase Review
+- [x] 1.1 Review `src/config.py` to identify hyperparameters already in `TrainingConfig`
+  - [x] 1.1.1 List all current config fields with default values
+  - [x] 1.1.2 Document which hyperparameters are already configurable
+- [x] 1.2 Review `src/model/transformer.py` to identify model architecture hyperparameters
+  - [x] 1.2.1 Check `Transformer.__init__` for hardcoded architecture parameters
+  - [x] 1.2.2 Document current defaults: n_layers, d_model, n_heads, d_ff, dropout
+  - [x] 1.2.3 Check for any other hardcoded model-related values
+- [x] 1.3 Review `main.py` to identify hardcoded training/dataset parameters
+  - [x] 1.3.1 Check `split_corpus` call for hardcoded train_ratio
+  - [x] 1.3.2 Check `Transformer` instantiation for hardcoded architecture parameters
+  - [x] 1.3.3 Check training loop for hardcoded max_steps default
+  - [x] 1.3.4 Check checkpoint saving logic for hardcoded checkpoint_cadence
+- [x] 1.4 Review `src/dataset.py` to identify dataset-related hyperparameters
+  - [x] 1.4.1 Check `split_corpus` function for default train_ratio
+  - [x] 1.4.2 Check `WindowDataset` for any hardcoded values
+- [x] 1.5 Review `src/training/trainer.py` to identify training-related defaults
+  - [x] 1.5.1 Check for any hardcoded training loop parameters
+  - [x] 1.5.2 Verify all training hyperparameters come from config
+- [x] 1.6 Review `src/training/checkpoint.py` to identify checkpoint-related parameters
+  - [x] 1.6.1 Check for hardcoded checkpoint save frequency
+  - [x] 1.6.2 Check for hardcoded checkpoint naming/formatting
+- [x] 1.7 Review `src/evaluation/evaluator.py` to identify evaluation-related parameters
+  - [x] 1.7.1 Check for hardcoded evaluation settings
+  - [x] 1.7.2 Verify evaluation uses config values
+- [x] 1.8 Review `src/sampling/sampler.py` to identify sampling-related parameters
+  - [x] 1.8.1 Check for hardcoded sampling settings
+  - [x] 1.8.2 Verify sampling uses config values
+- [x] 1.9 Review `src/tokenizer.py` to identify tokenizer-related parameters
+  - [x] 1.9.1 Document tokenizer type/policy (character-level ASCII)
+  - [x] 1.9.2 Note if tokenizer hyperparameters should be configurable (Phase 3+ consideration)
+
+## 2. Hyperparameter Inventory Creation
+- [x] 2.1 Create comprehensive inventory document
+  - [x] 2.1.1 List all hyperparameters found in codebase review
+  - [x] 2.1.2 For each hyperparameter, document:
+    - Current value
+    - Current location (file:line)
+    - Category (Model Architecture, Training, Dataset, Evaluation, Sampling, Checkpointing)
+    - Whether it should be configurable
+    - Suggested default value (if different from current)
+    - Value constraints/notes
+- [x] 2.2 Categorize hyperparameters
+  - [x] 2.2.1 Model Architecture: n_layers, d_model, n_heads, d_ff, dropout
+  - [x] 2.2.2 Training: learning_rate, weight_decay, beta1, beta2, batch_size, max_steps
+  - [x] 2.2.3 Dataset: max_seq_len, train_ratio
+  - [x] 2.2.4 Evaluation: eval_cadence
+  - [x] 2.2.5 Sampling: sampling_cadence, sampling_temperature, sampling_prompt, sampling_max_length, sampling_seed
+  - [x] 2.2.6 Checkpointing: checkpoint_cadence
+  - [x] 2.2.7 Other: seed
+- [x] 2.3 Identify missing hyperparameters
+  - [x] 2.3.1 Compare inventory against Phase 2 goals
+  - [x] 2.3.2 Identify hyperparameters that should be configurable but aren't in config yet
+  - [x] 2.3.3 Identify hyperparameters that are hardcoded but should be configurable
+- [x] 2.4 Document hyperparameters that should remain hardcoded
+  - [x] 2.4.1 Identify any hyperparameters that should stay hardcoded
+  - [x] 2.4.2 Provide justification for each hardcoded hyperparameter
+- [x] 2.5 Document value ranges and constraints
+  - [x] 2.5.1 For each hyperparameter, document reasonable value ranges
+  - [x] 2.5.2 Document any constraints (e.g., dropout between 0 and 1)
+  - [x] 2.5.3 Document interactions between hyperparameters (if any)
+
+## 3. Summary Document Creation
+- [x] 3.1 Create summary document with findings
+  - [x] 3.1.1 List all hyperparameters already in config (with checkmarks)
+  - [x] 3.1.2 List all hyperparameters that need to be added to config (with priorities)
+  - [x] 3.1.3 Provide clear categorization
+  - [x] 3.1.4 Include file locations for easy reference
+- [x] 3.2 Format inventory for Phase 2 Sessions 2-6
+  - [x] 3.2.1 Ensure format is actionable for config extension (Session 2)
+  - [x] 3.2.2 Ensure format supports YAML config creation (Session 3)
+  - [x] 3.2.3 Ensure format supports README documentation (Session 5)
+- [x] 3.3 Validate completeness
+  - [x] 3.3.1 Verify all hyperparameters from phase2-hyperparameters.md are accounted for
+  - [x] 3.3.2 Verify no hyperparameters were missed in codebase review
+  - [x] 3.3.3 Cross-reference with README.md to ensure consistency
+
+## 4. Documentation
+- [x] 4.1 Create audit results document
+  - [x] 4.1.1 Save inventory as markdown document (e.g., `docs/hyperparameter-audit.md` or similar)
+  - [x] 4.1.2 Ensure document is well-formatted and easy to navigate
+  - [x] 4.1.3 Include table of contents if document is long
+- [x] 4.2 Update phase2-hyperparameters.md if needed
+  - [x] 4.2.1 Update Session 1 section with actual findings
+  - [x] 4.2.2 Mark Session 1 tasks as complete
+  - [x] 4.2.3 Note any discrepancies between expected and actual findings
+

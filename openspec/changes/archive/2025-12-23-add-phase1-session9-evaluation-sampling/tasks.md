@@ -55,7 +55,7 @@
 - [x] 3.3 Update `src/evaluation/__init__.py` to export public API
 - [x] 3.4 Update `src/sampling/__init__.py` to export public API
 - [x] 3.5 Update `src/training/__init__.py` if needed
-- [ ] 3.6 Run all tests and verify they pass
+- [x] 3.6 Run all tests and verify they pass
 - [x] 3.7 Fix any linter errors
 - [x] 3.8 Verify code follows project style guidelines
 
