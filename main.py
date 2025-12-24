@@ -183,8 +183,17 @@ def main():
         config = TrainingConfig()
         print("Using default configuration")
     
-    # Override max_steps if provided
-    max_steps = args.max_steps if args.max_steps is not None else 10000
+    # Override max_steps if provided (CLI takes precedence over config)
+    max_steps = args.max_steps if args.max_steps is not None else config.max_steps
+    if args.max_steps is not None:
+        print(f"max_steps overridden via CLI: {max_steps} (config had {config.max_steps})")
+    
+    # Log key training hyperparameters
+    print(f"\nTraining configuration:")
+    print(f"  max_steps: {max_steps}")
+    print(f"  checkpoint_cadence: {config.checkpoint_cadence}")
+    print(f"  batch_size: {config.batch_size}")
+    print(f"  train_ratio: {config.train_ratio}")
     
     # Determine data file path
     if args.data:
@@ -214,8 +223,10 @@ def main():
     print(f"Tokenized corpus: {len(corpus)} tokens, vocab_size: {vocab_size}")
     
     # Split corpus into train/val
-    print("Splitting corpus into train/val (95%/5%)...")
-    train_corpus, val_corpus = split_corpus(corpus, train_ratio=0.95, seed=config.seed or 42)
+    train_ratio = config.train_ratio
+    val_ratio = 1.0 - train_ratio
+    print(f"Splitting corpus into train/val ({train_ratio*100:.1f}%/{val_ratio*100:.1f}%)...")
+    train_corpus, val_corpus = split_corpus(corpus, train_ratio=train_ratio, seed=config.seed or 42)
     print(f"Train: {len(train_corpus)} tokens, Val: {len(val_corpus)} tokens")
     
     # Create datasets
@@ -235,7 +246,16 @@ def main():
         try:
             print(f"Loading checkpoint from {args.resume}...")
             # Create model and optimizer first (will be loaded from checkpoint)
-            model = Transformer(vocab_size=vocab_size, max_seq_len=config.max_seq_len, seed=config.seed)
+            model = Transformer(
+                vocab_size=vocab_size,
+                max_seq_len=config.max_seq_len,
+                n_layers=config.n_layers,
+                d_model=config.d_model,
+                n_heads=config.n_heads,
+                d_ff=config.d_ff,
+                dropout=config.dropout,
+                seed=config.seed
+            )
             optimizer = create_optimizer(model, config)
             
             # Load checkpoint and create trainer
@@ -250,7 +270,18 @@ def main():
     else:
         # Create model and optimizer from scratch
         print("Creating model...")
-        model = Transformer(vocab_size=vocab_size, max_seq_len=config.max_seq_len, seed=config.seed)
+        print(f"  Architecture: n_layers={config.n_layers}, d_model={config.d_model}, "
+              f"n_heads={config.n_heads}, d_ff={config.d_ff}, dropout={config.dropout}")
+        model = Transformer(
+            vocab_size=vocab_size,
+            max_seq_len=config.max_seq_len,
+            n_layers=config.n_layers,
+            d_model=config.d_model,
+            n_heads=config.n_heads,
+            d_ff=config.d_ff,
+            dropout=config.dropout,
+            seed=config.seed
+        )
         num_params = sum(p.numel() for p in model.parameters())
         print(f"Model created: {num_params:,} parameters")
         
@@ -269,6 +300,10 @@ def main():
     
     # Training loop
     print(f"\nStarting training for {max_steps} steps...")
+    if config.checkpoint_cadence is not None:
+        print(f"Checkpoints will be saved every {config.checkpoint_cadence} steps")
+    else:
+        print("Periodic checkpointing is disabled (checkpoint_cadence is None)")
     print("Press Ctrl+C to interrupt and save checkpoint\n")
     
     try:
@@ -282,8 +317,10 @@ def main():
                 loss = trainer.training_step(batch)
                 step_count += 1
                 
-                # Save checkpoint periodically (every 1000 steps)
-                if trainer.step % 1000 == 0:
+                # Save checkpoint periodically
+                if (config.checkpoint_cadence is not None and 
+                    trainer.step > 0 and 
+                    trainer.step % config.checkpoint_cadence == 0):
                     checkpoint_path = trainer.save_checkpoint(tokenizer)
                     print(f"Checkpoint saved to {checkpoint_path}")
             

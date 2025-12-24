@@ -19,7 +19,7 @@ The system SHALL provide a main entry point that orchestrates all Phase 1 compon
 - **AND** all components are already implemented and tested (from Phase 1)
 
 ### Requirement: Configuration Loading
-The system SHALL load training configuration, supporting YAML files or defaults, with command-line overrides. TrainingConfig SHALL include all hyperparameters needed for training, including model architecture, training loop, dataset, evaluation, sampling, and checkpointing parameters.
+The system SHALL load training configuration, supporting YAML files or defaults, with command-line overrides. TrainingConfig SHALL include all hyperparameters needed for training, including model architecture, training loop, dataset, evaluation, sampling, and checkpointing parameters. The system SHALL provide example YAML configuration files demonstrating all hyperparameters and a standard config file format with documentation.
 
 #### Scenario: Load configuration from YAML file
 - **WHEN** `main.py` is invoked with `--config <path>` argument
@@ -62,25 +62,60 @@ The system SHALL load training configuration, supporting YAML files or defaults,
 - **AND** training proceeds successfully with defaults
 - **AND** no errors occur due to missing fields
 
+#### Scenario: Default YAML config file exists
+- **WHEN** users examine the `configs/` directory
+- **THEN** `configs/default.yaml` exists with all hyperparameters
+- **AND** each hyperparameter includes inline comments explaining its purpose, default value, and when to change it
+- **AND** config file is organized into logical sections (model architecture, training, dataset, evaluation, sampling, checkpointing)
+- **AND** config file demonstrates the standard YAML format for all hyperparameters
+
+#### Scenario: Example YAML config files demonstrate different use cases
+- **WHEN** users examine the `configs/` directory
+- **THEN** `configs/small-model.yaml` exists demonstrating smaller model configuration
+- **AND** `configs/large-model.yaml` exists demonstrating larger model configuration
+- **AND** `configs/fast-training.yaml` exists demonstrating faster training settings
+- **AND** `configs/detailed-eval.yaml` exists demonstrating more frequent evaluation/sampling
+- **AND** each example config includes comments explaining its use case and trade-offs
+
+#### Scenario: Config directory documentation exists
+- **WHEN** users examine the `configs/` directory
+- **THEN** `configs/README.md` exists documenting:
+  - How to use config files (--config flag)
+  - How to create custom configs
+  - How configs are loaded and merged with defaults
+  - Examples of common modifications
+  - Links to example config files
+  - Troubleshooting common config errors
+- **AND** documentation is clear and comprehensive
+- **AND** examples match actual config file format
+
 ### Requirement: Data Loading and Setup
-The system SHALL load text data, initialize tokenizer, and create train/val datasets and dataloaders.
+The system SHALL load text data, initialize tokenizer, and create train/val datasets and dataloaders using hyperparameters from config.
 
 #### Scenario: Load data and create datasets
 - **WHEN** data file path is provided (via --data or default)
 - **THEN** text data is loaded from file
 - **AND** Tokenizer is initialized and corpus is tokenized
-- **AND** corpus is split using `split_corpus()` (95%/5% train/val)
+- **AND** corpus is split using `split_corpus()` with `train_ratio` from config (default: 0.95)
 - **AND** WindowDataset instances are created for train and val
 - **AND** DataLoader instances are created with batch_size from config
 
 ### Requirement: Model and Trainer Initialization
-The system SHALL initialize the Transformer model, optimizer, and Trainer.
+The system SHALL initialize the Transformer model, optimizer, and Trainer using hyperparameters from config.
 
 #### Scenario: Create model and trainer
 - **WHEN** vocab_size and configuration are available
-- **THEN** Transformer model is created with vocab_size and config parameters
-- **AND** AdamW optimizer is created using `create_optimizer()`
+- **THEN** Transformer model is created with vocab_size and all architecture hyperparameters from config:
+  - `n_layers` from `config.n_layers` (default: 4)
+  - `d_model` from `config.d_model` (default: 256)
+  - `n_heads` from `config.n_heads` (default: 4)
+  - `d_ff` from `config.d_ff` (default: 1024)
+  - `dropout` from `config.dropout` (default: 0.1)
+  - `max_seq_len` from `config.max_seq_len` (default: 256)
+  - `seed` from `config.seed` (default: None)
+- **AND** AdamW optimizer is created using `create_optimizer()` with config
 - **AND** Trainer is initialized with model, optimizer, config, val_dataloader, and tokenizer
+- **AND** model architecture hyperparameters are logged when model is created
 
 ### Requirement: Checkpoint Resume
 The system SHALL support resuming training from a saved checkpoint.
@@ -97,26 +132,23 @@ The system SHALL support resuming training from a saved checkpoint.
 - **AND** program exits gracefully with non-zero exit code
 
 ### Requirement: Training Loop Execution
-The system SHALL execute the training loop by iterating over batches and calling trainer methods.
+The system SHALL execute the training loop by iterating over batches and calling trainer methods, using hyperparameters from config.
 
 #### Scenario: Run training loop
 - **WHEN** trainer is initialized
 - **THEN** training loop iterates over batches from training DataLoader
 - **AND** `trainer.training_step(batch)` is called for each batch
-- **AND** loop continues until max_steps is reached
+- **AND** loop continues until `max_steps` from config is reached (default: 10000)
+- **AND** `max_steps` can be overridden via CLI `--max-steps` argument (CLI override takes precedence)
 - **AND** Trainer handles logging, evaluation cadence, and sampling cadence internally
 
 #### Scenario: Periodic checkpoint saving
 - **WHEN** training is in progress
-- **THEN** checkpoints are saved periodically (e.g., every N steps or at end)
-- **AND** `trainer.save_checkpoint()` is called with tokenizer
+- **THEN** checkpoints are saved periodically using `checkpoint_cadence` from config (default: 1000 steps)
+- **AND** if `config.checkpoint_cadence` is None, periodic checkpointing is disabled
+- **AND** `trainer.save_checkpoint()` is called with tokenizer at the specified cadence
+- **AND** final checkpoint is always saved at the end of training regardless of cadence
 - **AND** checkpoint path is logged
-
-#### Scenario: Graceful shutdown on KeyboardInterrupt
-- **WHEN** training is interrupted with Ctrl+C (KeyboardInterrupt)
-- **THEN** current checkpoint is saved before exit
-- **AND** program exits gracefully
-- **AND** training can be resumed from saved checkpoint
 
 ### Requirement: Structured Logging
 The system SHALL ensure training logs are structured and parseable for experiment tracking and reproducibility.
