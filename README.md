@@ -175,16 +175,22 @@ curl -o data/sample.txt https://www.gutenberg.org/files/1342/1342-0.txt
 ### 2. Run Training
 
 ```bash
+# Use default configuration
 uv run python main.py
+
+# Or use a custom configuration file
+uv run python main.py --config configs/small-model.yaml
 ```
 
 This will:
 - Create a character-level tokenizer
 - Split the corpus into train/val sets (95%/5%)
-- Initialize a 4-layer Transformer (256 dim, 4 heads)
+- Initialize a 4-layer Transformer (256 dim, 4 heads) by default
 - Train for the configured number of steps
 - Save checkpoints periodically
 - Log training progress and generate text samples
+
+See the [Configuration](#configuration) section below for details on customizing hyperparameters. Example config files are available in the [`configs/`](configs/) directory.
 
 ### 3. Resume from Checkpoint
 
@@ -209,27 +215,288 @@ uv run pytest tests/test_transformer.py -v
 
 ## Configuration
 
-The model can be configured by editing configuration files or passing parameters. Key hyperparameters:
+The model uses a YAML-based configuration system that allows you to customize all hyperparameters without modifying code. Configuration files provide a clean, version-controlled way to manage training settings.
 
-**Model Architecture:**
-- `n_layers`: 4 (transformer blocks)
-- `d_model`: 256 (embedding dimension)
-- `n_heads`: 4 (attention heads)
-- `d_ff`: 1024 (feed-forward dimension)
-- `dropout`: 0.1
-- `context_length`: 256 tokens
+### Overview
 
-**Training:**
-- `batch_size`: 16
-- `learning_rate`: 3e-4
-- `weight_decay`: 0.1
-- `betas`: (0.9, 0.95)
-- `max_steps`: Configurable
+The configuration system works by:
+1. Loading default values from `TrainingConfig` class
+2. Optionally loading values from a YAML config file (via `--config` flag)
+3. Optionally overriding specific values via command-line arguments (e.g., `--max-steps`)
+4. Validating all values and constraints before training starts
 
-**Evaluation:**
-- Validation loss computed every 200 steps
-- Text samples generated periodically
-- Fixed seed for reproducibility
+### Using Config Files
+
+To use a configuration file, pass it to `main.py` with the `--config` flag:
+
+```bash
+uv run python main.py --config configs/default.yaml
+```
+
+If no config file is specified, the system uses default values from `TrainingConfig`.
+
+### Creating Custom Configs
+
+You can create custom configuration files by:
+
+1. **Starting from an example**: Copy one of the example configs as a starting point
+   ```bash
+   cp configs/default.yaml configs/my-config.yaml
+   ```
+
+2. **Modifying values**: Edit the YAML file to change hyperparameters
+   ```yaml
+   # Example: Change learning rate and batch size
+   learning_rate: 1.0e-4
+   batch_size: 32
+   ```
+
+3. **Using your config**: Run training with your custom config
+   ```bash
+   uv run python main.py --config configs/my-config.yaml
+   ```
+
+**Partial configs are supported**: You don't need to specify all hyperparameters. Only include the ones you want to change. All other values will use defaults from `TrainingConfig`.
+
+### Overriding via CLI
+
+You can override specific hyperparameters from the command line even when using a config file:
+
+```bash
+# Override max_steps even when using a config file
+uv run python main.py --config configs/default.yaml --max-steps 5000
+```
+
+### Example Config Files
+
+Several example configurations are provided in the [`configs/`](configs/) directory:
+
+- **[`configs/default.yaml`](configs/default.yaml)** - Complete reference with all hyperparameters documented
+- **[`configs/small-model.yaml`](configs/small-model.yaml)** - Smaller model for quick experimentation
+- **[`configs/large-model.yaml`](configs/large-model.yaml)** - Larger model for better quality
+- **[`configs/fast-training.yaml`](configs/fast-training.yaml)** - Faster training settings
+- **[`configs/detailed-eval.yaml`](configs/detailed-eval.yaml)** - More frequent evaluation and sampling
+
+For detailed information about configuration files, see [`configs/README.md`](configs/README.md).
+
+## Hyperparameter Reference
+
+This section documents all available hyperparameters, their default values, reasonable ranges, and important constraints.
+
+### Model Architecture Hyperparameters
+
+These control the structure and size of the transformer model.
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `n_layers` | 4 | 2-12+ | Number of transformer blocks. Controls model depth. More layers increase capacity but slow training/inference. |
+| `d_model` | 256 | 128-2048+ | Model dimension / embedding size. Controls the width of the model. **Must be divisible by `n_heads`**. |
+| `n_heads` | 4 | 2-32+ | Number of attention heads. Controls multi-head attention. **Must divide `d_model` evenly**. |
+| `d_ff` | 1024 | 256-8192+ | Feed-forward network dimension. Controls the width of the MLP layers. Typically 4x `d_model`. |
+| `dropout` | 0.1 | 0.0-1.0 | Dropout probability. Applied to attention and MLP layers for regularization. **Constraint: 0.0 ≤ dropout ≤ 1.0** |
+
+**Important Constraints:**
+- `d_model` must be divisible by `n_heads` (e.g., if `d_model=256` and `n_heads=4`, then 256 % 4 == 0 ✓)
+- `dropout` must be between 0.0 and 1.0 (inclusive)
+
+### Training Hyperparameters
+
+These control the training process and optimizer behavior.
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `learning_rate` | 3e-4 | 1e-5 to 1e-3 | Learning rate for AdamW optimizer. Common range: 1e-5 to 1e-3. |
+| `weight_decay` | 0.1 | 0.0-1.0 | Weight decay for L2 regularization. Helps prevent overfitting. |
+| `beta1` | 0.9 | 0.8-0.99 | First momentum coefficient for AdamW. Controls exponential decay rate for first moment estimates. |
+| `beta2` | 0.95 | 0.9-0.999 | Second momentum coefficient for AdamW. Controls exponential decay rate for second moment estimates. |
+| `batch_size` | 16 | 1-128+ | Batch size for training. Larger batches use more memory but provide more stable gradients. |
+| `max_steps` | 10000 | 1+ | Maximum number of training steps. Training stops after this many steps. **Can be overridden via CLI with `--max-steps`**. |
+
+### Dataset Hyperparameters
+
+These control how the training data is split and processed.
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `max_seq_len` | 256 | 64-2048+ | Maximum sequence length (context window). Longer sequences allow the model to see more context but use more memory. |
+| `train_ratio` | 0.95 | 0.0-1.0 (exclusive) | Fraction of data to use for training. Remaining fraction (1 - `train_ratio`) is used for validation. **Constraint: 0.0 < train_ratio < 1.0** |
+
+### Evaluation/Sampling Hyperparameters
+
+These control when and how the model is evaluated and sampled during training.
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `eval_cadence` | null | positive integer or null | Evaluation cadence in steps. If set, validation loss is computed every N steps. If `null`, evaluation is disabled. |
+| `sampling_cadence` | null | positive integer or null | Sampling cadence in steps. If set, text samples are generated every N steps. If `null`, sampling is disabled. |
+| `sampling_temperature` | 1.0 | 0.1-2.0 | Temperature for text sampling. Lower values (0.1-0.5) make output more deterministic. Higher values (1.0-2.0) make output more creative/random. |
+| `sampling_prompt` | "The" | any string | Fixed prompt for text sampling. The model will generate text starting from this prompt. |
+| `sampling_max_length` | 100 | 1-1000+ | Maximum number of tokens to generate during sampling. |
+| `sampling_seed` | 42 | any integer or null | Random seed for sampling reproducibility. Set to `null` for non-deterministic sampling. |
+
+### Checkpointing Hyperparameters
+
+These control checkpoint saving behavior.
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `checkpoint_cadence` | 1000 | positive integer or null | Steps between checkpoint saves. If `null`, periodic checkpointing is disabled (checkpoints are still saved at the end of training). |
+
+### Other Hyperparameters
+
+| Hyperparameter | Default | Range | Description |
+|---------------|---------|-------|-------------|
+| `seed` | null | any integer or null | Random seed for reproducibility. Set to `null` for non-deterministic training. |
+
+## Configuration Examples
+
+This section provides practical examples of using the configuration system.
+
+### Example 1: Using Default Config
+
+The simplest way to train is to use the default configuration:
+
+```bash
+uv run python main.py
+```
+
+This automatically uses default values from `TrainingConfig` (4 layers, 256 dim, 4 heads, etc.). No config file is needed.
+
+### Example 2: Using Custom Config File
+
+To use a custom configuration file:
+
+```bash
+uv run python main.py --config configs/my-config.yaml
+```
+
+Create `configs/my-config.yaml` with your desired hyperparameters. Only specify the values you want to change; defaults are used for everything else.
+
+### Example 3: Modifying Specific Hyperparameters
+
+You can create a minimal config file that only overrides specific values:
+
+```yaml
+# configs/custom-lr.yaml - Only change learning rate and batch size
+learning_rate: 1.0e-4  # Lower learning rate
+batch_size: 32  # Larger batch size
+```
+
+Then use it:
+
+```bash
+uv run python main.py --config configs/custom-lr.yaml
+```
+
+All other hyperparameters will use their default values.
+
+### Example 4: Creating a Small Model Config
+
+For quick experimentation or limited computational resources, use a smaller model:
+
+```yaml
+# configs/my-small-model.yaml
+n_layers: 2  # Fewer transformer blocks
+d_model: 128  # Smaller model dimension
+n_heads: 2  # Fewer attention heads (must divide d_model)
+d_ff: 512  # Smaller feed-forward dimension
+batch_size: 32  # Can use larger batch size with smaller model
+```
+
+**Trade-offs:**
+- ✅ Faster training and inference
+- ✅ Lower memory usage
+- ❌ Less model capacity (may not capture complex patterns)
+
+### Example 5: Creating a Large Model Config
+
+For better quality results with sufficient computational resources:
+
+```yaml
+# configs/my-large-model.yaml
+n_layers: 6  # More transformer blocks
+d_model: 512  # Larger model dimension
+n_heads: 8  # More attention heads (must divide d_model)
+d_ff: 2048  # Larger feed-forward dimension
+batch_size: 8  # Smaller batch size due to memory constraints
+max_steps: 20000  # May need more steps to converge
+```
+
+**Trade-offs:**
+- ✅ Better model capacity and quality
+- ❌ Slower training and inference
+- ❌ Higher memory usage
+- ❌ Requires more training steps to converge
+
+## Troubleshooting
+
+This section covers common configuration issues and how to resolve them.
+
+### Common Config Errors
+
+#### Config File Not Found
+
+**Error:** `Config file not found: configs/my-config.yaml`
+
+**Solution:** Check that the file path is correct and the file exists. Use relative paths from the project root or absolute paths.
+
+#### Invalid YAML Syntax
+
+**Error:** `Invalid YAML in config file: ...`
+
+**Solution:** Check your YAML syntax. Common issues:
+- Missing colons after keys
+- Incorrect indentation (YAML is indentation-sensitive)
+- Unquoted strings with special characters
+- Mixing tabs and spaces (use spaces only)
+
+**Example of correct YAML:**
+```yaml
+learning_rate: 3.0e-4
+batch_size: 16
+n_layers: 4
+```
+
+#### Invalid Hyperparameter Values
+
+**Error:** `ValueError: d_model (128) must be divisible by n_heads (3)`
+
+**Solution:** Ensure constraints are met:
+- `d_model` must be divisible by `n_heads` (e.g., if `n_heads=4`, `d_model` must be 4, 8, 12, 16, 20, 24, 28, 32, ...)
+- `dropout` must be between 0.0 and 1.0 (inclusive)
+- `train_ratio` must be between 0.0 and 1.0 (exclusive, i.e., not 0.0 or 1.0)
+- All positive integer fields (`n_layers`, `d_model`, `n_heads`, `d_ff`, `batch_size`, `max_steps`, etc.) must be > 0
+
+#### Unknown Hyperparameters
+
+**Note:** Unknown hyperparameters in YAML files are silently ignored. Only valid `TrainingConfig` fields are used. This allows you to add comments or temporary values without breaking the config loader.
+
+### How to Validate Config Files
+
+Before running training, you can validate your config file:
+
+1. **Check YAML syntax**: Use a YAML validator or try loading it:
+   ```bash
+   python -c "import yaml; yaml.safe_load(open('configs/my-config.yaml'))"
+   ```
+
+2. **Verify hyperparameter constraints**: Ensure:
+   - `d_model % n_heads == 0`
+   - `0.0 <= dropout <= 1.0`
+   - `0.0 < train_ratio < 1.0`
+   - All positive integer fields are > 0
+
+3. **Test loading config**: The config loader will validate values when you run training. If there are errors, they will be reported before training starts.
+
+### How to Check Which Config is Active
+
+When you run training, the system logs the active configuration:
+
+1. **Check startup logs**: At the beginning of training, the system logs a summary of the active configuration, including all hyperparameter values.
+
+2. **Check config hash**: Each run logs a `config_hash` that uniquely identifies the configuration used. This helps ensure reproducibility.
+
+3. **Review config file**: If you specified `--config`, the values from that file (merged with defaults) are what's active. If you didn't specify a config file, defaults from `TrainingConfig` are used.
 
 ## Architecture Overview
 
