@@ -150,6 +150,10 @@ experimental-slm/
 │   │   └── update_hooks.py     # Gradient update hooks
 │   ├── evaluation/              # Evaluation utilities
 │   │   └── evaluator.py        # Validation loss computation
+│   ├── quantization/            # Quantization support
+│   │   ├── quantizer.py        # Core quantization logic
+│   │   ├── ptq.py              # Post-training quantization
+│   │   └── qat.py              # Quantization-aware training
 │   └── sampling/                # Text generation
 │       └── sampler.py          # Temperature-based sampling
 ├── tests/                       # Comprehensive unit tests
@@ -427,6 +431,131 @@ max_steps: 20000  # May need more steps to converge
 - ❌ Slower training and inference
 - ❌ Higher memory usage
 - ❌ Requires more training steps to converge
+
+## Quantization
+
+The project supports quantization to reduce model size and enable faster inference. Quantization converts models from full-precision (FP32) to lower precision formats (INT8 or INT4), reducing memory usage by 4x (INT8) or 8x (INT4).
+
+### Quantization Modes
+
+The project supports two quantization modes:
+
+1. **Post-Training Quantization (PTQ)**: Convert a trained FP32 model to quantized format after training is complete.
+2. **Quantization-Aware Training (QAT)**: Train models with quantization simulation, producing models that are more robust to quantization.
+
+### Configuration
+
+Quantization is configured via the `TrainingConfig` class or YAML config files:
+
+```yaml
+# Enable quantization-aware training
+quantization_mode: "qat"  # Options: null, "ptq", "qat"
+quantization_bits: 8      # Options: 8 (INT8) or 4 (INT4)
+quantization_type: "static"  # Options: "static" or "dynamic"
+enable_quantized_finetuning: false  # Enable fine-tuning of quantized models
+```
+
+### Using Post-Training Quantization (PTQ)
+
+To quantize a trained model:
+
+```python
+from src.quantization import quantize_model_ptq
+import torch
+
+# Load your trained model
+model = Transformer(vocab_size=1000, ...)
+# ... load model weights ...
+
+# Prepare calibration data (for static quantization)
+calibration_data = [torch.randint(0, vocab_size, (batch_size, seq_len)) 
+                     for _ in range(100)]
+
+# Quantize the model
+quantized_model = quantize_model_ptq(
+    model,
+    quantization_bits=8,
+    quantization_type="static",
+    calibration_data=calibration_data
+)
+
+# For dynamic quantization (no calibration needed):
+quantized_model = quantize_model_ptq(
+    model,
+    quantization_bits=8,
+    quantization_type="dynamic"
+)
+```
+
+### Using Quantization-Aware Training (QAT)
+
+To train with QAT:
+
+1. **Configure QAT in your config file**:
+```yaml
+quantization_mode: "qat"
+quantization_bits: 8
+quantization_type: "static"
+```
+
+2. **Train normally**: The Trainer will automatically prepare the model for QAT and simulate quantization during training.
+
+3. **Convert to quantized model after training**:
+```python
+from src.quantization import convert_qat_model
+
+quantized_model = convert_qat_model(qat_trained_model)
+```
+
+### Fine-Tuning Quantized Models
+
+You can fine-tune quantized models for task adaptation:
+
+```yaml
+quantization_mode: "ptq"  # Start with a quantized model
+enable_quantized_finetuning: true  # Enable fine-tuning
+```
+
+The Trainer will maintain quantization throughout fine-tuning, preserving memory and speed benefits.
+
+### Checkpoint Support
+
+Quantized models are fully supported in checkpoints:
+
+- Quantization metadata is saved automatically
+- Quantized checkpoints can be loaded and resumed
+- Backward compatibility: old checkpoints (without quantization) still load correctly
+
+### Example: Quantization Workflow
+
+```python
+# 1. Train with QAT
+config = TrainingConfig(
+    quantization_mode="qat",
+    quantization_bits=8,
+    # ... other config ...
+)
+trainer = Trainer(model, optimizer, config, ...)
+# ... train ...
+
+# 2. Convert to quantized model
+from src.quantization import convert_qat_model
+quantized_model = convert_qat_model(trainer.model)
+
+# 3. Save quantized checkpoint
+trainer.save_checkpoint(tokenizer, checkpoint_name="quantized_model")
+
+# 4. Load and fine-tune quantized model
+config.enable_quantized_finetuning = True
+trainer = Trainer.from_checkpoint("checkpoints/quantized_model", ...)
+# ... continue training ...
+```
+
+### Limitations
+
+- **INT4 support**: INT4 quantization has limited support and may use INT8 as fallback
+- **Per-tensor quantization**: Currently supports per-tensor quantization (per-channel can be added later)
+- **Linear layers only**: Quantization focuses on linear layers (attention projections, MLP layers, LM head)
 
 ## Troubleshooting
 

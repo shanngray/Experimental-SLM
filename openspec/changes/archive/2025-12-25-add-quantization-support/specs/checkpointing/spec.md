@@ -1,8 +1,5 @@
-# checkpointing Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-phase1-session7-checkpointing. Update Purpose after archive.
-## Requirements
 ### Requirement: Checkpoint Save
 The system SHALL provide functionality to save complete training state to disk, including model weights, optimizer state, training configuration, vocabulary, and step counter. For quantized models, quantization metadata and quantized state_dict SHALL also be saved.
 

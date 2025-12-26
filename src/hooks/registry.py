@@ -98,11 +98,13 @@ class HookRegistry:
         Raises:
             ValueError: If hook name is unknown.
         """
-        from src.hooks.forward_hooks import ActivationStatsHook
+        from src.hooks.forward_hooks import ActivationStatsHook, QuantizationStatsHook
         
         name = config.get("name")
         if name == "activation_stats":
             return ActivationStatsHook(**{k: v for k, v in config.items() if k != "name" and k != "enabled"})
+        elif name == "quantization_stats":
+            return QuantizationStatsHook(**{k: v for k, v in config.items() if k != "name" and k != "enabled"})
         else:
             raise ValueError(f"Unknown forward hook name: {name}")
     

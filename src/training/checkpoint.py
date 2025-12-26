@@ -15,6 +15,7 @@ import torch
 
 from src.config import TrainingConfig
 from src.tokenizer import Tokenizer
+from src.quantization import is_model_quantized, get_quantization_info
 
 
 def save_checkpoint(
@@ -84,7 +85,19 @@ def save_checkpoint(
     metadata = {
         "step": step,
         "config": config.to_dict(),
+        "checkpoint_version": "1.0",  # Version for backward compatibility
     }
+    
+    # Check if model is quantized and save quantization metadata
+    if is_model_quantized(model):
+        quantization_info = get_quantization_info(model)
+        metadata["quantization"] = quantization_info
+        
+        # Save quantization metadata separately
+        quantization_metadata_path = checkpoint_path / "quantization_metadata.json"
+        with open(quantization_metadata_path, "w", encoding="utf-8") as f:
+            json.dump(quantization_info, f, indent=2)
+    
     metadata_path = checkpoint_path / "metadata.json"
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
@@ -137,6 +150,32 @@ def load_checkpoint(
             f"Checkpoint path is not a directory: {checkpoint_path}"
         )
     
+    # Load metadata first to check for quantization
+    metadata_path = checkpoint_path / "metadata.json"
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"Metadata checkpoint file not found: {metadata_path}"
+        )
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load metadata checkpoint from {metadata_path}: {e}"
+        ) from e
+    
+    # Check for quantization metadata
+    quantization_metadata = None
+    quantization_metadata_path = checkpoint_path / "quantization_metadata.json"
+    if quantization_metadata_path.exists():
+        try:
+            with open(quantization_metadata_path, "r", encoding="utf-8") as f:
+                quantization_metadata = json.load(f)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load quantization metadata from {quantization_metadata_path}: {e}"
+            ) from e
+    
     # Load model state_dict
     model_path = checkpoint_path / "model.pt"
     if not model_path.exists():
@@ -144,7 +183,8 @@ def load_checkpoint(
             f"Model checkpoint file not found: {model_path}"
         )
     try:
-        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+        state_dict = torch.load(model_path, map_location="cpu")
+        model.load_state_dict(state_dict, strict=False)  # Use strict=False for quantized models
     except Exception as e:
         raise RuntimeError(
             f"Failed to load model checkpoint from {model_path}: {e}"
@@ -198,21 +238,7 @@ def load_checkpoint(
             f"Failed to load vocabulary checkpoint from {vocab_path}: {e}"
         ) from e
     
-    # Load metadata
-    metadata_path = checkpoint_path / "metadata.json"
-    if not metadata_path.exists():
-        raise FileNotFoundError(
-            f"Metadata checkpoint file not found: {metadata_path}"
-        )
-    try:
-        with open(metadata_path, "r", encoding="utf-8") as f:
-            metadata = json.load(f)
-    except Exception as e:
-        raise RuntimeError(
-            f"Failed to load metadata checkpoint from {metadata_path}: {e}"
-        ) from e
-    
-    # Extract step and config
+    # Extract step and config (metadata already loaded above)
     step = metadata.get("step")
     if step is None:
         raise RuntimeError(
@@ -227,13 +253,19 @@ def load_checkpoint(
     
     config = TrainingConfig.from_dict(config_dict)
     
-    return {
+    result = {
         "step": step,
         "config": config,
         "model": model,
         "optimizer": optimizer,
         "tokenizer": tokenizer,
     }
+    
+    # Add quantization metadata if present
+    if quantization_metadata is not None:
+        result["quantization_metadata"] = quantization_metadata
+    
+    return result
 
 
 def load_checkpoint_config(

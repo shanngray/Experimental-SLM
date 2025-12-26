@@ -133,3 +133,24 @@ hooks: null  # Hook configuration dictionary.
              # If null, no hooks are registered.
              # Default: null
 
+# ============================================================================
+# Quantization Hyperparameters
+# ============================================================================
+# These control model quantization for reduced size and faster inference.
+
+quantization_mode: null  # Quantization mode.
+                         # Options: null (disabled), "ptq" (post-training quantization), "qat" (quantization-aware training).
+                         # Default: null (quantization disabled)
+
+quantization_bits: 8  # Number of bits for quantization.
+                      # Options: 8 (INT8) or 4 (INT4). Note: INT4 support is limited.
+                      # Default: 8
+
+quantization_type: "static"  # Type of quantization.
+                            # Options: "static" (requires calibration data) or "dynamic" (no calibration needed).
+                            # Default: "static"
+
+enable_quantized_finetuning: false  # Enable fine-tuning of quantized models.
+                                     # If true, allows continuing training of quantized models.
+                                     # Default: false
+

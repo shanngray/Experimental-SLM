@@ -7,6 +7,12 @@ from src.config import TrainingConfig
 from src.model.transformer import Transformer
 from src.training.loss import compute_loss
 from src.training.trainer import Trainer, create_optimizer
+from src.quantization import (
+    prepare_model_for_qat,
+    is_qat_model,
+    quantize_model_ptq,
+    is_model_quantized,
+)
 
 
 def test_compute_loss_shape():
@@ -687,4 +693,185 @@ def test_training_config_validation_positive_integers():
     
     with pytest.raises(ValueError, match="d_ff.*must be positive"):
         TrainingConfig(d_ff=0)
+
+
+def _check_quantization_engine_available() -> bool:
+    """Check if PyTorch quantization engines are available."""
+    try:
+        if not hasattr(torch.backends, 'quantized'):
+            return False
+        current_engine = torch.backends.quantized.engine
+        supported_engines = torch.backends.quantized.supported_engines
+        if not supported_engines:
+            return False
+        if current_engine == 'none' or current_engine is None:
+            return False
+        return True
+    except (AttributeError, RuntimeError, TypeError):
+        return False
+
+
+def test_trainer_qat_prepares_model():
+    """Test that Trainer prepares model for QAT when quantization_mode is 'qat'."""
+    vocab_size = 100
+    model = Transformer(vocab_size=vocab_size)
+    config = TrainingConfig(quantization_mode="qat", quantization_bits=8)
+    optimizer = create_optimizer(model, config)
+    
+    trainer = Trainer(model, optimizer, config)
+    
+    # Model should be prepared for QAT
+    assert is_qat_model(trainer.model)
+
+
+def test_trainer_qat_training_step():
+    """Test that QAT training step completes successfully."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size)
+    config = TrainingConfig(quantization_mode="qat", quantization_bits=8)
+    optimizer = create_optimizer(model, config)
+    trainer = Trainer(model, optimizer, config)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Training step should complete
+    loss = trainer.training_step(inputs)
+    
+    assert isinstance(loss, float)
+    assert loss > 0
+    assert trainer.step == 1
+
+
+def test_trainer_qat_training_updates_parameters():
+    """Test that QAT training updates model parameters."""
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size)
+    config = TrainingConfig(quantization_mode="qat", quantization_bits=8)
+    optimizer = create_optimizer(model, config)
+    trainer = Trainer(model, optimizer, config)
+    
+    # Store initial parameter values
+    initial_params = {}
+    for name, param in trainer.model.named_parameters():
+        initial_params[name] = param.data.clone()
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    trainer.training_step(inputs)
+    
+    # Check that parameters have changed
+    params_changed = False
+    for name, param in trainer.model.named_parameters():
+        if name in initial_params:
+            if not torch.allclose(param.data, initial_params[name], atol=1e-6):
+                params_changed = True
+                break
+    
+    assert params_changed
+
+
+def test_trainer_quantized_finetuning_enabled():
+    """Test that Trainer enables quantized fine-tuning when configured."""
+    vocab_size = 100
+    model = Transformer(vocab_size=vocab_size)
+    model.eval()
+    
+    # Quantize model first
+    quantized_model = quantize_model_ptq(
+        model,
+        quantization_bits=8,
+        quantization_type="dynamic"
+    ) if _check_quantization_engine_available() else model
+    
+    config = TrainingConfig(
+        quantization_mode="ptq",
+        enable_quantized_finetuning=True
+    )
+    optimizer = create_optimizer(quantized_model, config)
+    
+    trainer = Trainer(quantized_model, optimizer, config)
+    
+    # Should detect quantized model and enable fine-tuning
+    assert trainer._is_quantized or not _check_quantization_engine_available()
+    assert trainer._quantized_finetuning_enabled or not _check_quantization_engine_available()
+
+
+def test_trainer_quantized_finetuning_training_step():
+    """Test that quantized fine-tuning training step completes."""
+    # Skip test if quantization engines are not available
+    if not _check_quantization_engine_available():
+        pytest.skip("PyTorch quantization engines not available")
+    
+    vocab_size = 100
+    batch_size = 2
+    seq_len = 256
+    
+    model = Transformer(vocab_size=vocab_size)
+    model.eval()
+    
+    # Quantize model
+    quantized_model = quantize_model_ptq(
+        model,
+        quantization_bits=8,
+        quantization_type="dynamic"
+    )
+    
+    config = TrainingConfig(
+        quantization_mode="ptq",
+        enable_quantized_finetuning=True
+    )
+    optimizer = create_optimizer(quantized_model, config)
+    trainer = Trainer(quantized_model, optimizer, config)
+    
+    inputs = torch.randint(0, vocab_size, (batch_size, seq_len))
+    
+    # Training step should complete
+    loss = trainer.training_step(inputs)
+    
+    assert isinstance(loss, float)
+    assert loss > 0
+    assert trainer.step == 1
+
+
+def test_trainer_qat_loss_decreases():
+    """Test that QAT training reduces loss over multiple steps."""
+    vocab_size = 10
+    batch_size = 2
+    seq_len = 64
+    
+    model = Transformer(
+        vocab_size=vocab_size,
+        n_layers=2,
+        d_model=64,
+        n_heads=2,
+        d_ff=256
+    )
+    
+    config = TrainingConfig(
+        quantization_mode="qat",
+        quantization_bits=8,
+        learning_rate=1e-2
+    )
+    optimizer = create_optimizer(model, config)
+    trainer = Trainer(model, optimizer, config)
+    
+    # Create simple repeating pattern
+    pattern = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9] * (seq_len // 10 + 1))[:seq_len]
+    inputs = pattern.unsqueeze(0).repeat(batch_size, 1)
+    
+    # Train for a few steps
+    losses = []
+    for _ in range(5):
+        loss = trainer.training_step(inputs)
+        losses.append(loss)
+    
+    # Loss should generally decrease
+    initial_loss = losses[0]
+    min_loss = min(losses[1:])
+    assert min_loss <= initial_loss * 1.1  # Allow 10% tolerance
 

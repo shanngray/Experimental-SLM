@@ -20,6 +20,11 @@ from src.hooks.registry import HookRegistry
 from src.tokenizer import Tokenizer
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.loss import compute_loss
+from src.quantization import (
+    prepare_model_for_qat,
+    is_model_quantized,
+    is_qat_model,
+)
 
 
 def create_optimizer(
@@ -96,6 +101,23 @@ class Trainer:
         # Initialize hook registry from config
         hooks_config = config.get_hooks_config()
         self.hook_registry = HookRegistry(hooks_config)
+        
+        # Prepare model for QAT if enabled
+        if config.quantization_mode == "qat":
+            if not is_qat_model(model):
+                # Prepare model for QAT if not already prepared
+                self.model = prepare_model_for_qat(
+                    model,
+                    quantization_bits=config.quantization_bits
+                )
+                # Recreate optimizer with new model parameters
+                self.optimizer = create_optimizer(self.model, config)
+        
+        # Check if model is quantized and fine-tuning is enabled
+        self._is_quantized = is_model_quantized(model) or is_qat_model(model)
+        self._quantized_finetuning_enabled = (
+            self._is_quantized and config.enable_quantized_finetuning
+        )
         
         # Generate run ID and log run metadata (only once)
         self.run_id = str(uuid.uuid4())

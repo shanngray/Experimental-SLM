@@ -34,6 +34,15 @@ The emphasis is on learning and experimentation, not on competing with large-sca
   - Auxiliary losses (regularizers, constraints) toggleable via config
 - **Device abstraction**: CPU-first design with modular device layer for future MPS/CUDA support
 - **Config-driven**: Model size, data, training, and hooks controlled via YAML configuration files (not JSON)
+  - All hyperparameters must be configurable via YAML files in `configs/` directory
+  - Hyperparameters are categorized: Model Architecture, Training, Dataset, Evaluation, Sampling, Checkpointing, Other
+  - Config system centralized in `TrainingConfig` class (`src/config.py`)
+  - YAML files include inline comments documenting each hyperparameter (purpose, defaults, ranges, constraints)
+  - Example configs for different use cases (small-model, large-model, fast-training, detailed-eval)
+  - Validation logic enforces constraints (e.g., `d_model % n_heads == 0`, `0.0 <= dropout <= 1.0`)
+  - CLI overrides permitted for convenience (e.g., `--max-steps`) but config remains source of truth
+  - Backward compatibility required: missing fields use sensible defaults from `TrainingConfig`
+  - No hardcoded hyperparameter values in main entry points; all flow from config
 
 ### Testing Strategy
 - **Reproducibility**: Strict random seed management and deterministic operations

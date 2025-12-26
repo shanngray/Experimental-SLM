@@ -77,6 +77,16 @@ class TrainingConfig:
         sampling_prompt: Fixed prompt for text sampling (default: "The").
         sampling_max_length: Maximum number of tokens to generate (default: 100).
         sampling_seed: Random seed for sampling reproducibility (default: 42).
+        
+        # Quantization Hyperparameters
+        quantization_mode: Quantization mode (default: None, quantization disabled).
+            Options: None (disabled), "ptq" (post-training quantization), "qat" (quantization-aware training).
+        quantization_bits: Number of bits for quantization (default: 8).
+            Options: 8 (INT8) or 4 (INT4). Note: INT4 support is limited.
+        quantization_type: Type of quantization (default: "static").
+            Options: "static" (requires calibration data) or "dynamic" (no calibration needed).
+        enable_quantized_finetuning: Enable fine-tuning of quantized models (default: False).
+            If True, allows continuing training of quantized models.
     """
     # Model Architecture Hyperparameters
     n_layers: int = 4
@@ -111,6 +121,12 @@ class TrainingConfig:
     sampling_prompt: str = "The"
     sampling_max_length: int = 100
     sampling_seed: int = 42
+    
+    # Quantization Hyperparameters
+    quantization_mode: Optional[str] = None  # None, "ptq", or "qat"
+    quantization_bits: int = 8  # 8 or 4
+    quantization_type: str = "static"  # "static" or "dynamic"
+    enable_quantized_finetuning: bool = False
     
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -164,6 +180,23 @@ class TrainingConfig:
             raise ValueError(
                 f"checkpoint_cadence ({self.checkpoint_cadence}) must be positive or None"
             )
+        
+        # Validate quantization settings
+        if self.quantization_mode is not None:
+            if self.quantization_mode not in ("ptq", "qat", "none"):
+                raise ValueError(
+                    f"quantization_mode must be None, 'ptq', 'qat', or 'none', "
+                    f"got {self.quantization_mode}"
+                )
+        if self.quantization_bits not in (4, 8):
+            raise ValueError(
+                f"quantization_bits must be 8 or 4, got {self.quantization_bits}"
+            )
+        if self.quantization_type not in ("static", "dynamic"):
+            raise ValueError(
+                f"quantization_type must be 'static' or 'dynamic', "
+                f"got {self.quantization_type}"
+            )
     
     @classmethod
     def from_dict(cls, config_dict: dict) -> "TrainingConfig":
@@ -192,7 +225,10 @@ class TrainingConfig:
             # Other
             "seed", "hooks",
             "eval_cadence", "sampling_cadence", "sampling_temperature",
-            "sampling_prompt", "sampling_max_length", "sampling_seed"
+            "sampling_prompt", "sampling_max_length", "sampling_seed",
+            # Quantization
+            "quantization_mode", "quantization_bits", "quantization_type",
+            "enable_quantized_finetuning"
         }
         filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         return cls(**filtered_dict)
@@ -231,6 +267,11 @@ class TrainingConfig:
             "sampling_prompt": self.sampling_prompt,
             "sampling_max_length": self.sampling_max_length,
             "sampling_seed": self.sampling_seed,
+            # Quantization
+            "quantization_mode": self.quantization_mode,
+            "quantization_bits": self.quantization_bits,
+            "quantization_type": self.quantization_type,
+            "enable_quantized_finetuning": self.enable_quantized_finetuning,
         }
         if self.hooks is not None:
             result["hooks"] = self.hooks

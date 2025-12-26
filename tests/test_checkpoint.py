@@ -12,6 +12,12 @@ from src.model.transformer import Transformer
 from src.tokenizer import Tokenizer
 from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.trainer import Trainer, create_optimizer
+from src.quantization import (
+    quantize_model_ptq,
+    is_model_quantized,
+    get_quantization_info,
+    prepare_model_for_qat,
+)
 
 
 def test_save_checkpoint_creates_directory():
@@ -590,7 +596,10 @@ def test_load_checkpoint_missing_model_file():
         # Create other files but not model.pt
         (checkpoint_path / "optimizer.pt").touch()
         (checkpoint_path / "vocab.json").touch()
-        (checkpoint_path / "metadata.json").touch()
+        # Create valid metadata.json so we can get to the model file check
+        metadata_path = checkpoint_path / "metadata.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump({"step": 0, "config": {}, "checkpoint_version": "1.0"}, f)
         
         with pytest.raises(FileNotFoundError) as exc_info:
             load_checkpoint(checkpoint_path, model, optimizer, tokenizer)
@@ -703,4 +712,223 @@ def test_trainer_from_checkpoint():
         state2 = model2.state_dict()
         for key in state1.keys():
             assert torch.allclose(state1[key], state2[key])
+
+
+def _check_quantization_engine_available() -> bool:
+    """Check if PyTorch quantization engines are available."""
+    try:
+        if not hasattr(torch.backends, 'quantized'):
+            return False
+        current_engine = torch.backends.quantized.engine
+        supported_engines = torch.backends.quantized.supported_engines
+        if not supported_engines:
+            return False
+        if current_engine == 'none' or current_engine is None:
+            return False
+        return True
+    except (AttributeError, RuntimeError, TypeError):
+        return False
+
+
+def test_save_quantized_checkpoint_creates_metadata():
+    """Test that saving a quantized checkpoint creates quantization metadata."""
+    # Skip test if quantization engines are not available
+    if not _check_quantization_engine_available():
+        pytest.skip("PyTorch quantization engines not available")
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        model.eval()
+        config = TrainingConfig()
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        # Quantize the model using dynamic quantization (no calibration needed)
+        quantized_model = quantize_model_ptq(
+            model,
+            quantization_bits=8,
+            quantization_type="dynamic"
+        )
+        
+        checkpoint_path = save_checkpoint(
+            model=quantized_model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="quantized_checkpoint"
+        )
+        
+        # Check that quantization metadata file exists
+        quantization_metadata_path = checkpoint_path / "quantization_metadata.json"
+        assert quantization_metadata_path.exists()
+        
+        # Check that metadata.json includes quantization info
+        metadata_path = checkpoint_path / "metadata.json"
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+        
+        assert "quantization" in metadata
+        assert metadata["quantization"]["is_quantized"] == True
+
+
+def test_save_quantized_checkpoint_metadata_content():
+    """Test that quantization metadata contains expected fields."""
+    # Skip test if quantization engines are not available
+    if not _check_quantization_engine_available():
+        pytest.skip("PyTorch quantization engines not available")
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        model.eval()
+        config = TrainingConfig()
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        # Quantize the model
+        quantized_model = quantize_model_ptq(
+            model,
+            quantization_bits=8,
+            quantization_type="dynamic"
+        )
+        
+        checkpoint_path = save_checkpoint(
+            model=quantized_model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="quantized_checkpoint"
+        )
+        
+        # Load quantization metadata
+        quantization_metadata_path = checkpoint_path / "quantization_metadata.json"
+        with open(quantization_metadata_path, "r", encoding="utf-8") as f:
+            quantization_metadata = json.load(f)
+        
+        # Verify metadata structure
+        assert quantization_metadata["is_quantized"] == True
+        assert quantization_metadata["quantization_bits"] == 8
+        assert "quantized_layers" in quantization_metadata
+
+
+def test_load_quantized_checkpoint_restores_metadata():
+    """Test that loading a quantized checkpoint restores quantization metadata."""
+    # Skip test if quantization engines are not available
+    if not _check_quantization_engine_available():
+        pytest.skip("PyTorch quantization engines not available")
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model1 = Transformer(vocab_size=vocab_size)
+        model1.eval()
+        config = TrainingConfig()
+        optimizer1 = create_optimizer(model1, config)
+        tokenizer1 = Tokenizer()
+        
+        # Quantize and save
+        quantized_model1 = quantize_model_ptq(
+            model1,
+            quantization_bits=8,
+            quantization_type="dynamic"
+        )
+        
+        checkpoint_path = save_checkpoint(
+            model=quantized_model1,
+            optimizer=optimizer1,
+            config=config,
+            tokenizer=tokenizer1,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="quantized_checkpoint"
+        )
+        
+        # Load checkpoint
+        model2 = Transformer(vocab_size=vocab_size)
+        optimizer2 = create_optimizer(model2, config)
+        tokenizer2 = Tokenizer()
+        
+        checkpoint_data = load_checkpoint(
+            checkpoint_path, model2, optimizer2, tokenizer2
+        )
+        
+        # Verify quantization metadata is returned
+        assert "quantization_metadata" in checkpoint_data
+        assert checkpoint_data["quantization_metadata"]["is_quantized"] == True
+        assert checkpoint_data["quantization_metadata"]["quantization_bits"] == 8
+
+
+def test_load_checkpoint_without_quantization_metadata():
+    """Test that loading a non-quantized checkpoint works (backward compatibility)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig()
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        # Save non-quantized checkpoint
+        checkpoint_path = save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="normal_checkpoint"
+        )
+        
+        # Verify quantization metadata file does NOT exist
+        quantization_metadata_path = checkpoint_path / "quantization_metadata.json"
+        assert not quantization_metadata_path.exists()
+        
+        # Load checkpoint
+        model2 = Transformer(vocab_size=vocab_size)
+        optimizer2 = create_optimizer(model2, config)
+        tokenizer2 = Tokenizer()
+        
+        checkpoint_data = load_checkpoint(
+            checkpoint_path, model2, optimizer2, tokenizer2
+        )
+        
+        # Should load successfully without quantization metadata
+        assert checkpoint_data["step"] == 0
+        assert "quantization_metadata" not in checkpoint_data or checkpoint_data.get("quantization_metadata") is None
+
+
+def test_save_qat_checkpoint():
+    """Test saving a checkpoint with a QAT model."""
+    # Skip test if quantization engines are not available
+    if not _check_quantization_engine_available():
+        pytest.skip("PyTorch quantization engines not available")
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig(quantization_mode="qat", quantization_bits=8)
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        # Prepare model for QAT
+        qat_model = prepare_model_for_qat(model, quantization_bits=8)
+        
+        checkpoint_path = save_checkpoint(
+            model=qat_model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="qat_checkpoint"
+        )
+        
+        # QAT models may or may not be detected as quantized depending on implementation
+        # But checkpoint should save successfully
+        assert checkpoint_path.exists()
+        assert (checkpoint_path / "model.pt").exists()
+        assert (checkpoint_path / "metadata.json").exists()
 
