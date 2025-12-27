@@ -94,3 +94,58 @@ Open questions to keep in the outline
 ⸻
 
 If you want the next step to be maximally useful: I can turn this into a Phase 1 build plan (ordered milestones) plus a single config schema (YAML/JSON-ish) that controls model size, data, training, and hooks—so you can scale and experiment just by editing config.
+
+---
+
+## Multi-Model Architecture
+
+The system supports multiple model architectures through an adapter pattern, enabling importing pretrained models from HuggingFace and fine-tuning them.
+
+### Architecture Adapter System
+
+- **BaseAdapter**: Common interface for all architectures (`src/model/adapters/base.py`)
+  - Defines `forward()`, `get_config()`, `save_checkpoint()`, `load_checkpoint()`
+  - Provides unified API for training loop
+- **CustomTransformerAdapter**: Wraps the original Transformer architecture
+  - Used when `model_name` is `null` in config (backward compatible)
+- **QwenAdapter**: Supports Qwen family models from HuggingFace
+  - Handles Qwen-specific layer naming and tokenizer integration
+- **Extensible**: New architectures can be added by implementing BaseAdapter
+
+### Model Registry
+
+- **Location**: `models/registry.json`
+- **Purpose**: Tracks available models and their metadata
+- **Dual Identifiers**: 
+  - `model_name`: User-friendly identifier for configs (e.g., "qwen-0.5b-base")
+  - `model_id`: Original identifier from source (e.g., "Qwen/Qwen-0.5B")
+- **Metadata**: Architecture type, source, fine-tuning lineage, timestamps, license
+
+### Model Loading Flow
+
+1. Config specifies `model_name` (or `null` for custom Transformer)
+2. If `model_name` is set, registry resolves to model entry
+3. Adapter is selected based on `architecture_type` field
+4. Model weights and config loaded from `models/{model_name}/` directory
+5. Tokenizer selected:
+   - Native tokenizer for imported models (e.g., Qwen's tokenizer)
+   - Character-level tokenizer for custom Transformer
+
+### Checkpointing with Model Metadata
+
+Checkpoints include:
+- **Model metadata**: `model_name`, `model_id`, `model_source`
+- **Fine-tuning lineage**: `fine_tuned_from` (immediate parent only)
+- **Standard checkpoint data**: weights, optimizer state, config, step counter
+
+This enables:
+- Resuming training with correct model architecture
+- Tracking fine-tuning chains (model provenance)
+- Understanding model relationships
+
+### Fine-Tuning Workflow
+
+1. Import base model: `python main.py import-model Qwen/Qwen-0.5B`
+2. Create config with `model_name: "qwen-0.5b-base"`
+3. Train: Checkpoints automatically track `fine_tuned_from`
+4. Resume: System loads correct model based on checkpoint metadata

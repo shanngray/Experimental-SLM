@@ -42,6 +42,11 @@ logs/*
 checkpoints/*
 !checkpoints/.gitkeep
 
+# Model files (large binary files)
+models/*
+!models/.gitkeep
+!models/registry.json
+
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb

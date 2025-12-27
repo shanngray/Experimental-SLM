@@ -684,3 +684,128 @@ class TestExampleConfigFiles:
         assert config.sampling_max_length == 100
         assert config.sampling_seed == 42
 
+
+class TestModelNameConfig:
+    """Test model_name field in TrainingConfig."""
+    
+    def test_model_name_default_is_none(self):
+        """Test model_name defaults to None (custom Transformer)."""
+        config = TrainingConfig()
+        assert config.model_name is None
+    
+    def test_model_name_can_be_set(self):
+        """Test model_name can be set to a string."""
+        config = TrainingConfig(model_name="qwen-0.5b-base")
+        assert config.model_name == "qwen-0.5b-base"
+    
+    def test_model_name_from_dict(self):
+        """Test model_name can be loaded from dictionary."""
+        config_dict = {"model_name": "my-model"}
+        config = TrainingConfig.from_dict(config_dict)
+        assert config.model_name == "my-model"
+    
+    def test_model_name_serialized_to_dict(self):
+        """Test model_name is serialized to dictionary."""
+        config = TrainingConfig(model_name="qwen-0.5b-base")
+        config_dict = config.to_dict()
+        assert config_dict["model_name"] == "qwen-0.5b-base"
+    
+    def test_model_name_none_serialized(self):
+        """Test model_name=None is serialized correctly."""
+        config = TrainingConfig(model_name=None)
+        config_dict = config.to_dict()
+        assert config_dict["model_name"] is None
+    
+    def test_model_name_empty_string_raises_error(self):
+        """Test empty string model_name raises ValueError."""
+        with pytest.raises(ValueError, match="cannot be an empty string"):
+            TrainingConfig(model_name="")
+    
+    def test_model_name_invalid_type_raises_error(self):
+        """Test invalid type for model_name raises ValueError."""
+        with pytest.raises(ValueError, match="must be None or a non-empty string"):
+            TrainingConfig.from_dict({"model_name": 123})
+    
+    def test_model_name_yaml_loading(self):
+        """Test model_name can be loaded from YAML."""
+        from main import load_config_from_yaml
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_dict = {"model_name": "qwen-0.5b-base"}
+            yaml.dump(config_dict, f)
+            config_path = f.name
+        
+        try:
+            config = load_config_from_yaml(config_path)
+            assert config.model_name == "qwen-0.5b-base"
+        finally:
+            Path(config_path).unlink()
+    
+    def test_model_name_none_in_yaml(self):
+        """Test model_name=None in YAML loads correctly."""
+        from main import load_config_from_yaml
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            config_dict = {"model_name": None}
+            yaml.dump(config_dict, f)
+            config_path = f.name
+        
+        try:
+            config = load_config_from_yaml(config_path)
+            assert config.model_name is None
+        finally:
+            Path(config_path).unlink()
+    
+    def test_model_name_missing_uses_default(self):
+        """Test missing model_name uses default (None)."""
+        config_dict = {"batch_size": 32}
+        config = TrainingConfig.from_dict(config_dict)
+        assert config.model_name is None
+    
+    def test_tokenizer_override_default_is_none(self):
+        """Test tokenizer_override defaults to None."""
+        config = TrainingConfig()
+        assert config.tokenizer_override is None
+    
+    def test_tokenizer_override_can_be_set(self):
+        """Test tokenizer_override can be set."""
+        config = TrainingConfig(tokenizer_override="custom")
+        assert config.tokenizer_override == "custom"
+    
+    def test_tokenizer_override_from_dict(self):
+        """Test tokenizer_override can be loaded from dictionary."""
+        config_dict = {"tokenizer_override": "custom"}
+        config = TrainingConfig.from_dict(config_dict)
+        assert config.tokenizer_override == "custom"
+    
+    def test_model_name_and_tokenizer_override_together(self):
+        """Test model_name and tokenizer_override can be set together."""
+        config = TrainingConfig(
+            model_name="qwen-0.5b-base",
+            tokenizer_override="custom"
+        )
+        assert config.model_name == "qwen-0.5b-base"
+        assert config.tokenizer_override == "custom"
+    
+    def test_model_name_backward_compatibility(self):
+        """Test configs without model_name still work (backward compatibility)."""
+        from main import load_config_from_yaml
+        
+        # Create config without model_name (old format)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            old_config = {
+                "learning_rate": 1e-3,
+                "batch_size": 16,
+                "max_seq_len": 128,
+            }
+            yaml.dump(old_config, f)
+            config_path = f.name
+        
+        try:
+            config = load_config_from_yaml(config_path)
+            # Should default to None (custom Transformer)
+            assert config.model_name is None
+            assert config.tokenizer_override is None
+        finally:
+            Path(config_path).unlink()
+

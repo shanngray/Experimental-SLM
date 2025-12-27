@@ -199,10 +199,30 @@ See the [Configuration](#configuration) section below for details on customizing
 ### 3. Resume from Checkpoint
 
 ```bash
-uv run python main.py --resume checkpoints/latest.pt
+uv run python main.py --resume checkpoints/checkpoint_step_1000
 ```
 
-### 4. Run Tests
+### 4. Import and Use Pretrained Models
+
+The system supports importing pretrained models from HuggingFace and fine-tuning them:
+
+```bash
+# Import a Qwen model from HuggingFace
+uv run python main.py import-model Qwen/Qwen-0.5B
+
+# List available models
+uv run python main.py list-models
+
+# View model details
+uv run python main.py model-info qwen-0.5b-base
+
+# Train with imported model (use model_name in config)
+uv run python main.py --config configs/qwen-base.yaml
+```
+
+See the [Multi-Model Support](#multi-model-support) section below for detailed documentation.
+
+### 5. Run Tests
 
 Run the full test suite to verify everything works:
 
@@ -626,6 +646,127 @@ When you run training, the system logs the active configuration:
 2. **Check config hash**: Each run logs a `config_hash` that uniquely identifies the configuration used. This helps ensure reproducibility.
 
 3. **Review config file**: If you specified `--config`, the values from that file (merged with defaults) are what's active. If you didn't specify a config file, defaults from `TrainingConfig` are used.
+
+## Multi-Model Support
+
+The system supports importing pretrained models from HuggingFace, fine-tuning them, and tracking fine-tuning lineage. This enables leveraging state-of-the-art architectures and building on existing models rather than always training from scratch.
+
+### Importing Models
+
+Import models from HuggingFace using the `import-model` command:
+
+```bash
+# Import a Qwen model
+uv run python main.py import-model Qwen/Qwen-0.5B
+
+# Import with custom name
+uv run python main.py import-model Qwen/Qwen-0.5B --name my-qwen-model
+```
+
+The import process:
+- Downloads model weights and configuration from HuggingFace Hub
+- Converts model to local format in `models/{model-name}/`
+- Registers model in `models/registry.json` with metadata
+- Displays license information and requires acknowledgment
+- Returns a `model_name` for use in configuration files
+
+### Model Selection via Config
+
+Select which model to use by setting `model_name` in your config file:
+
+```yaml
+# configs/qwen-base.yaml
+model_name: "qwen-0.5b-base"  # References model in registry
+learning_rate: 1e-4
+batch_size: 16
+max_steps: 10000
+```
+
+If `model_name` is `null` or omitted, the system uses the custom Transformer architecture (backward compatible).
+
+### Model Management Commands
+
+```bash
+# List all available models
+uv run python main.py list-models
+
+# Show detailed model information
+uv run python main.py model-info qwen-0.5b-base
+
+# Delete a model from registry
+uv run python main.py delete-model qwen-0.5b-base
+
+# Validate model integrity
+uv run python main.py validate-model qwen-0.5b-base
+```
+
+### Fine-Tuning Workflow
+
+Fine-tuning imported models is straightforward:
+
+1. **Import base model**:
+   ```bash
+   uv run python main.py import-model Qwen/Qwen-0.5B
+   ```
+
+2. **Create fine-tuning config**:
+   ```yaml
+   # configs/qwen-finetuned.yaml
+   model_name: "qwen-0.5b-base"
+   learning_rate: 5e-5  # Lower learning rate for fine-tuning
+   batch_size: 16
+   max_steps: 5000
+   ```
+
+3. **Train**:
+   ```bash
+   uv run python main.py --config configs/qwen-finetuned.yaml
+   ```
+
+4. **Resume fine-tuning**:
+   ```bash
+   uv run python main.py --resume checkpoints/checkpoint_step_1000 --config configs/qwen-finetuned.yaml
+   ```
+
+Checkpoints automatically track fine-tuning lineage (`fine_tuned_from` field), enabling you to trace the model's training history.
+
+### Supported Architectures
+
+Currently supported architectures:
+- **Qwen family**: Qwen-0.5B, Qwen-1.8B, and other Qwen variants
+- **Custom Transformer**: Original decoder-only Transformer (when `model_name` is `null`)
+
+The architecture adapter system is extensible - see `src/model/adapters/` for examples of adding new architectures.
+
+### Model Registry
+
+Models are tracked in `models/registry.json` with the following metadata:
+- `model_name`: User-friendly identifier for configs (e.g., "qwen-0.5b-base")
+- `model_id`: Original identifier from source (e.g., "Qwen/Qwen-0.5B")
+- `architecture_type`: Model architecture (e.g., "qwen", "custom-transformer")
+- `source`: Model source ("huggingface", "custom", "finetuned")
+- `fine_tuned_from`: Parent model name if this is a fine-tuned variant
+- `created_at`: Registration timestamp
+- Additional metadata (license, size, etc.)
+
+### Tokenizer Handling
+
+- **Imported models**: Use the model's native tokenizer (e.g., Qwen's tokenizer for Qwen models)
+- **Custom Transformer**: Uses character-level tokenizer
+- Tokenizer is automatically selected based on `model_name` in config
+
+### Checkpoint Metadata
+
+Checkpoints now include model metadata for fine-tuning lineage tracking:
+- `model_name`: Model name from registry
+- `model_id`: Original model identifier
+- `model_source`: Model source
+- `fine_tuned_from`: Parent model name (if fine-tuning)
+
+This enables:
+- Resuming training with the correct model
+- Tracking fine-tuning chains
+- Understanding model provenance
 
 ## Architecture Overview
 

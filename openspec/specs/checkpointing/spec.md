@@ -4,7 +4,7 @@
 TBD - created by archiving change add-phase1-session7-checkpointing. Update Purpose after archive.
 ## Requirements
 ### Requirement: Checkpoint Save
-The system SHALL provide functionality to save complete training state to disk, including model weights, optimizer state, training configuration, vocabulary, and step counter. For quantized models, quantization metadata and quantized state_dict SHALL also be saved.
+The system SHALL provide functionality to save complete training state to disk, including model weights, optimizer state, training configuration, vocabulary, step counter, model metadata (model_name, model_id, architecture_type, source), and fine-tuning lineage.
 
 #### Scenario: Save checkpoint creates files
 - **WHEN** `save_checkpoint()` is called with model, optimizer, config, vocab, and step
@@ -14,38 +14,40 @@ The system SHALL provide functionality to save complete training state to disk, 
 - **AND** training config is saved in JSON-compatible format
 - **AND** vocabulary is saved
 - **AND** step counter is saved
-- **AND** metadata file contains checkpoint information
-
-#### Scenario: Save quantized checkpoint
-- **WHEN** `save_checkpoint()` is called with a quantized model
-- **THEN** quantization metadata is saved in `quantization_metadata.json`
-- **AND** quantized model state_dict is saved
-- **AND** quantization parameters (scales, zero-points) are included
-- **AND** checkpoint metadata indicates quantization mode and bits
-- **AND** checkpoint can be distinguished from full-precision checkpoints
+- **AND** metadata file contains checkpoint information including model metadata
 
 #### Scenario: Checkpoint format
 - **WHEN** checkpoint is saved
 - **THEN** checkpoint uses PyTorch format (torch.save) for binary weights
 - **AND** metadata is stored in JSON format for human readability
 - **AND** checkpoint files are organized in checkpoints/ directory
-- **AND** checkpoint format version is included in metadata
+
+#### Scenario: Save model metadata in checkpoint
+- **WHEN** checkpoint is saved for a model loaded from registry
+- **THEN** checkpoint metadata includes model_name from registry
+- **AND** metadata includes model_id (original identifier, e.g., HuggingFace repo)
+- **AND** metadata includes architecture_type (e.g., "qwen", "custom-transformer")
+- **AND** metadata includes source (e.g., "huggingface", "custom", "finetuned")
+
+#### Scenario: Save fine-tuning lineage in checkpoint
+- **WHEN** checkpoint is saved for a fine-tuned model
+- **THEN** checkpoint metadata includes fine_tuned_from field with parent model_name
+- **AND** metadata includes fine-tuning start timestamp
+- **AND** metadata preserves full fine-tuning chain if parent was also fine-tuned
+
+#### Scenario: Save checkpoint for custom Transformer
+- **WHEN** checkpoint is saved for custom Transformer (no model_id specified)
+- **THEN** checkpoint metadata indicates architecture_type is "custom-transformer"
+- **AND** metadata includes model architecture params (n_layers, d_model, etc.)
+- **AND** checkpoint is compatible with existing checkpoint format for backward compatibility
 
 ### Requirement: Checkpoint Load
-The system SHALL provide functionality to load complete training state from disk, restoring model weights, optimizer state, training configuration, vocabulary, and step counter. For quantized checkpoints, quantization metadata and quantized state_dict SHALL also be restored.
+The system SHALL provide functionality to load complete training state from disk, restoring model weights, optimizer state, training configuration, vocabulary, step counter, model metadata (model_name, model_id), and fine-tuning lineage.
 
 #### Scenario: Load checkpoint restores model state
 - **WHEN** `load_checkpoint()` is called with a checkpoint path
 - **THEN** model state_dict is loaded and restored to the model
 - **AND** model parameters match the saved checkpoint exactly
-
-#### Scenario: Load quantized checkpoint
-- **WHEN** `load_checkpoint()` is called with a quantized checkpoint path
-- **THEN** quantization metadata is loaded from `quantization_metadata.json`
-- **AND** quantized model state_dict is restored
-- **AND** quantization parameters are restored
-- **AND** model is restored in quantized format
-- **AND** model can be used for inference or fine-tuning
 
 #### Scenario: Load checkpoint restores optimizer state
 - **WHEN** `load_checkpoint()` is called with a checkpoint path
@@ -59,25 +61,39 @@ The system SHALL provide functionality to load complete training state from disk
 - **AND** step counter is loaded and restored
 - **AND** all checkpoint data is returned in a structured format
 
-#### Scenario: Backward compatibility with old checkpoints
-- **WHEN** `load_checkpoint()` is called with an old checkpoint (no quantization metadata)
-- **THEN** checkpoint loads successfully as full-precision model
-- **AND** no errors are raised due to missing quantization metadata
-- **AND** model is restored in FP32 format
+#### Scenario: Load checkpoint restores model metadata
+- **WHEN** checkpoint with model metadata is loaded
+- **THEN** model_name is restored if present
+- **AND** model_id is restored if present
+- **AND** architecture_type is restored
+- **AND** source information is restored
+- **AND** model metadata is accessible to caller
+
+#### Scenario: Load checkpoint restores fine-tuning lineage
+- **WHEN** checkpoint for fine-tuned model is loaded
+- **THEN** fine_tuned_from field is restored
+- **AND** full fine-tuning chain is accessible
+- **AND** fine-tuning timestamps are preserved
+
+#### Scenario: Load checkpoint with architecture adapter
+- **WHEN** checkpoint is loaded for a specific architecture
+- **THEN** appropriate adapter is selected based on architecture_type
+- **AND** adapter loads weights correctly for that architecture
+- **AND** model is ready for training or inference with correct architecture
+
+#### Scenario: Handle checkpoints without model metadata (backward compatibility)
+- **WHEN** older checkpoint without model metadata is loaded
+- **THEN** system assumes custom-transformer architecture
+- **AND** loads checkpoint successfully with defaults
+- **AND** logs warning about missing metadata
 
 ### Requirement: Resume Training
-The system SHALL provide functionality to resume training from a saved checkpoint, continuing training from the saved step with identical loss progression. For quantized checkpoints, fine-tuning SHALL be supported if enabled.
+The system SHALL provide functionality to resume training from a saved checkpoint, continuing training from the saved step with identical loss progression, preserving model metadata (model_name, model_id) and fine-tuning lineage.
 
 #### Scenario: Resume continues step count
 - **WHEN** training is resumed from a checkpoint
 - **THEN** step counter continues from the saved step number
 - **AND** subsequent steps increment correctly from the resumed step
-
-#### Scenario: Resume quantized model for fine-tuning
-- **WHEN** training is resumed from a quantized checkpoint with fine-tuning enabled
-- **THEN** model is restored in quantized format
-- **AND** training can continue with quantized weights
-- **AND** quantization is maintained throughout fine-tuning
 
 #### Scenario: Resume produces identical loss progression
 - **WHEN** training is interrupted, checkpointed, and resumed
@@ -92,10 +108,24 @@ The system SHALL provide functionality to resume training from a saved checkpoin
 - **AND** training configuration matches saved configuration
 - **AND** vocabulary matches saved vocabulary
 - **AND** step counter matches saved step
-- **AND** quantization state is restored if present
+
+#### Scenario: Resume preserves model metadata
+- **WHEN** training is resumed from checkpoint with model metadata
+- **THEN** model_name is preserved
+- **AND** model_id is preserved
+- **AND** architecture_type is preserved
+- **AND** fine-tuning lineage is preserved
+- **AND** subsequent checkpoints maintain metadata chain
+
+#### Scenario: Resume as new fine-tuning run
+- **WHEN** user resumes from checkpoint but specifies new model_name
+- **THEN** system creates new fine-tuning variant
+- **AND** new model_name is registered in registry
+- **AND** fine_tuned_from points to original checkpoint's model_name
+- **AND** new fine-tuning chain is started
 
 ### Requirement: Checkpoint Error Handling
-The system SHALL handle checkpoint errors gracefully, providing clear error messages for missing or corrupted checkpoints. Errors SHALL also handle quantization-related issues.
+The system SHALL handle checkpoint errors gracefully, providing clear error messages for missing, corrupted, or incompatible checkpoints.
 
 #### Scenario: Missing checkpoint file
 - **WHEN** `load_checkpoint()` is called with a non-existent checkpoint path
@@ -107,8 +137,10 @@ The system SHALL handle checkpoint errors gracefully, providing clear error mess
 - **THEN** an appropriate error is raised (e.g., RuntimeError or ValueError)
 - **AND** error message clearly indicates the checkpoint file is corrupted or invalid
 
-#### Scenario: Missing quantization metadata
-- **WHEN** `load_checkpoint()` is called on a checkpoint that claims to be quantized but lacks quantization metadata
-- **THEN** an appropriate error is raised with clear message
-- **AND** error message indicates missing quantization information
+#### Scenario: Incompatible architecture checkpoint
+- **WHEN** checkpoint is loaded with mismatched architecture_type
+- **THEN** system detects incompatibility
+- **AND** displays clear error explaining architecture mismatch
+- **AND** suggests correct model_id or architecture to use
+- **AND** does not proceed with loading
 

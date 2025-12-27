@@ -177,6 +177,152 @@ def test_save_checkpoint_metadata():
         assert metadata["config"]["weight_decay"] == config.weight_decay
 
 
+def test_save_checkpoint_model_metadata():
+    """Test that model metadata is saved correctly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig()
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        checkpoint_path = save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="test_checkpoint",
+            model_name="qwen-0.5b-base",
+            model_id="Qwen/Qwen-0.5B",
+            model_source="huggingface",
+            fine_tuned_from="qwen-0.5b-original"
+        )
+        
+        # Load metadata
+        metadata_path = checkpoint_path / "metadata.json"
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+        
+        # Verify model metadata
+        assert metadata["model_name"] == "qwen-0.5b-base"
+        assert metadata["model_id"] == "Qwen/Qwen-0.5B"
+        assert metadata["model_source"] == "huggingface"
+        assert metadata["fine_tuned_from"] == "qwen-0.5b-original"
+
+
+def test_save_checkpoint_model_metadata_optional():
+    """Test that model metadata is optional."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig()
+        optimizer = create_optimizer(model, config)
+        tokenizer = Tokenizer()
+        
+        checkpoint_path = save_checkpoint(
+            model=model,
+            optimizer=optimizer,
+            config=config,
+            tokenizer=tokenizer,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="test_checkpoint"
+        )
+        
+        # Load metadata
+        metadata_path = checkpoint_path / "metadata.json"
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+        
+        # Verify model metadata is not present (backward compatibility)
+        assert "model_name" not in metadata
+        assert "model_id" not in metadata
+        assert "model_source" not in metadata
+        assert "fine_tuned_from" not in metadata
+
+
+def test_load_checkpoint_model_metadata():
+    """Test that model metadata is loaded correctly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model1 = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig()
+        optimizer1 = create_optimizer(model1, config)
+        tokenizer1 = Tokenizer()
+        
+        # Save checkpoint with model metadata
+        checkpoint_path = save_checkpoint(
+            model=model1,
+            optimizer=optimizer1,
+            config=config,
+            tokenizer=tokenizer1,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="test_checkpoint",
+            model_name="qwen-0.5b-base",
+            model_id="Qwen/Qwen-0.5B",
+            model_source="huggingface",
+            fine_tuned_from="qwen-0.5b-original"
+        )
+        
+        # Load checkpoint
+        model2 = Transformer(vocab_size=vocab_size)
+        optimizer2 = create_optimizer(model2, config)
+        tokenizer2 = Tokenizer()
+        
+        checkpoint_data = load_checkpoint(
+            checkpoint_path, model2, optimizer2, tokenizer2
+        )
+        
+        # Verify model metadata is returned
+        assert checkpoint_data["model_name"] == "qwen-0.5b-base"
+        assert checkpoint_data["model_id"] == "Qwen/Qwen-0.5B"
+        assert checkpoint_data["model_source"] == "huggingface"
+        assert checkpoint_data["fine_tuned_from"] == "qwen-0.5b-original"
+
+
+def test_load_checkpoint_backward_compatibility():
+    """Test that loading old checkpoints without model metadata still works."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        vocab_size = 100
+        model1 = Transformer(vocab_size=vocab_size)
+        config = TrainingConfig()
+        optimizer1 = create_optimizer(model1, config)
+        tokenizer1 = Tokenizer()
+        
+        # Save checkpoint without model metadata (old format)
+        checkpoint_path = save_checkpoint(
+            model=model1,
+            optimizer=optimizer1,
+            config=config,
+            tokenizer=tokenizer1,
+            step=0,
+            checkpoint_dir=tmpdir,
+            checkpoint_name="test_checkpoint"
+        )
+        
+        # Load checkpoint
+        model2 = Transformer(vocab_size=vocab_size)
+        optimizer2 = create_optimizer(model2, config)
+        tokenizer2 = Tokenizer()
+        
+        checkpoint_data = load_checkpoint(
+            checkpoint_path, model2, optimizer2, tokenizer2
+        )
+        
+        # Verify checkpoint loads successfully
+        assert checkpoint_data["step"] == 0
+        assert checkpoint_data["config"] is not None
+        
+        # Verify model metadata is not present (backward compatibility)
+        assert "model_name" not in checkpoint_data
+        assert "model_id" not in checkpoint_data
+        assert "model_source" not in checkpoint_data
+        assert "fine_tuned_from" not in checkpoint_data
+
+
 def test_save_checkpoint_vocabulary():
     """Test that vocabulary is saved correctly."""
     with tempfile.TemporaryDirectory() as tmpdir:

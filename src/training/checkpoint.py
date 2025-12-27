@@ -25,7 +25,11 @@ def save_checkpoint(
     tokenizer: Tokenizer,
     step: int,
     checkpoint_dir: str | Path = "checkpoints",
-    checkpoint_name: Optional[str] = None
+    checkpoint_name: Optional[str] = None,
+    model_name: Optional[str] = None,
+    model_id: Optional[str] = None,
+    model_source: Optional[str] = None,
+    fine_tuned_from: Optional[str] = None
 ) -> Path:
     """Save complete training state to disk.
     
@@ -42,6 +46,10 @@ def save_checkpoint(
         step: Current training step counter.
         checkpoint_dir: Directory to save checkpoints in (default: "checkpoints").
         checkpoint_name: Optional name for checkpoint. If None, uses "checkpoint_step_{step}".
+        model_name: Optional model name from registry (e.g., "qwen-0.5b-base").
+        model_id: Optional original model identifier (e.g., "Qwen/Qwen-0.5B").
+        model_source: Optional model source (e.g., "huggingface", "custom", "finetuned").
+        fine_tuned_from: Optional model_name of the parent model this was fine-tuned from.
     
     Returns:
         Path to the saved checkpoint directory.
@@ -87,6 +95,16 @@ def save_checkpoint(
         "config": config.to_dict(),
         "checkpoint_version": "1.0",  # Version for backward compatibility
     }
+    
+    # Add model metadata if provided
+    if model_name is not None:
+        metadata["model_name"] = model_name
+    if model_id is not None:
+        metadata["model_id"] = model_id
+    if model_source is not None:
+        metadata["model_source"] = model_source
+    if fine_tuned_from is not None:
+        metadata["fine_tuned_from"] = fine_tuned_from
     
     # Check if model is quantized and save quantization metadata
     if is_model_quantized(model):
@@ -260,6 +278,16 @@ def load_checkpoint(
         "optimizer": optimizer,
         "tokenizer": tokenizer,
     }
+    
+    # Add model metadata if present
+    if "model_name" in metadata:
+        result["model_name"] = metadata["model_name"]
+    if "model_id" in metadata:
+        result["model_id"] = metadata["model_id"]
+    if "model_source" in metadata:
+        result["model_source"] = metadata["model_source"]
+    if "fine_tuned_from" in metadata:
+        result["fine_tuned_from"] = metadata["fine_tuned_from"]
     
     # Add quantization metadata if present
     if quantization_metadata is not None:

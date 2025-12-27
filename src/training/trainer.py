@@ -161,17 +161,25 @@ class Trainer:
         self,
         tokenizer: Tokenizer,
         checkpoint_dir: str | Path = "checkpoints",
-        checkpoint_name: Optional[str] = None
+        checkpoint_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        model_id: Optional[str] = None,
+        model_source: Optional[str] = None,
+        fine_tuned_from: Optional[str] = None
     ) -> Path:
         """Save current training state to a checkpoint.
         
         Saves model state, optimizer state, config, vocabulary, and step counter
-        to disk for later resuming.
+        to disk for later resuming. Also saves model metadata for fine-tuning lineage tracking.
         
         Args:
             tokenizer: Tokenizer containing vocabulary to save.
             checkpoint_dir: Directory to save checkpoints in (default: "checkpoints").
             checkpoint_name: Optional name for checkpoint. If None, uses "checkpoint_step_{step}".
+            model_name: Optional model name from registry (e.g., "qwen-0.5b-base").
+            model_id: Optional original model identifier (e.g., "Qwen/Qwen-0.5B").
+            model_source: Optional model source (e.g., "huggingface", "custom", "finetuned").
+            fine_tuned_from: Optional model_name of the parent model this was fine-tuned from.
         
         Returns:
             Path to the saved checkpoint directory.
@@ -186,7 +194,11 @@ class Trainer:
             tokenizer=tokenizer,
             step=self.step,
             checkpoint_dir=checkpoint_dir,
-            checkpoint_name=checkpoint_name
+            checkpoint_name=checkpoint_name,
+            model_name=model_name,
+            model_id=model_id,
+            model_source=model_source,
+            fine_tuned_from=fine_tuned_from
         )
     
     def _log_run_metadata(self) -> None:

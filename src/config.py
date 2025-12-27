@@ -87,6 +87,15 @@ class TrainingConfig:
             Options: "static" (requires calibration data) or "dynamic" (no calibration needed).
         enable_quantized_finetuning: Enable fine-tuning of quantized models (default: False).
             If True, allows continuing training of quantized models.
+        
+        # Model Selection Hyperparameters
+        model_name: Model name from registry to use (default: None).
+            If None, uses custom Transformer architecture with architecture params from config.
+            If specified, loads model from registry and uses its architecture params.
+            Example: "qwen-0.5b-base" references a model in models/registry.json.
+        tokenizer_override: Override tokenizer type (default: None).
+            If None, uses model's native tokenizer (e.g., Qwen tokenizer for Qwen models).
+            If specified, can override to use custom tokenizer (advanced usage).
     """
     # Model Architecture Hyperparameters
     n_layers: int = 4
@@ -127,6 +136,10 @@ class TrainingConfig:
     quantization_bits: int = 8  # 8 or 4
     quantization_type: str = "static"  # "static" or "dynamic"
     enable_quantized_finetuning: bool = False
+    
+    # Model Selection Hyperparameters
+    model_name: Optional[str] = None  # Model name from registry, or None for custom Transformer
+    tokenizer_override: Optional[str] = None  # Override tokenizer type (advanced)
     
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -197,6 +210,15 @@ class TrainingConfig:
                 f"quantization_type must be 'static' or 'dynamic', "
                 f"got {self.quantization_type}"
             )
+        
+        # Validate model_name (if provided, must be non-empty string)
+        # Note: Existence in registry is validated when model is loaded, not here
+        if self.model_name is not None and not isinstance(self.model_name, str):
+            raise ValueError(
+                f"model_name must be None or a non-empty string, got {type(self.model_name).__name__}"
+            )
+        if self.model_name == "":
+            raise ValueError("model_name cannot be an empty string (use None for custom Transformer)")
     
     @classmethod
     def from_dict(cls, config_dict: dict) -> "TrainingConfig":
@@ -228,7 +250,9 @@ class TrainingConfig:
             "sampling_prompt", "sampling_max_length", "sampling_seed",
             # Quantization
             "quantization_mode", "quantization_bits", "quantization_type",
-            "enable_quantized_finetuning"
+            "enable_quantized_finetuning",
+            # Model Selection
+            "model_name", "tokenizer_override"
         }
         filtered_dict = {k: v for k, v in config_dict.items() if k in valid_keys}
         return cls(**filtered_dict)
@@ -272,6 +296,9 @@ class TrainingConfig:
             "quantization_bits": self.quantization_bits,
             "quantization_type": self.quantization_type,
             "enable_quantized_finetuning": self.enable_quantized_finetuning,
+            # Model Selection
+            "model_name": self.model_name,
+            "tokenizer_override": self.tokenizer_override,
         }
         if self.hooks is not None:
             result["hooks"] = self.hooks

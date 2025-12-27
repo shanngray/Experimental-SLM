@@ -268,6 +268,44 @@ If issues arise in any session:
 
 ---
 
+---
+
+## Session 6: Polish and Optimization
+**Goal**: Complete polish features and optimizations for production readiness.
+
+### Specs to Implement
+1. **model-import** (MODIFIED) - Enhanced progress, caching, checksums
+2. **model-registry** (MODIFIED) - Checksum validation support
+
+### Tasks
+- ✅ **11. Polish and Optimization** (all)
+  - Add progress bars for model download
+  - Improve model caching to avoid re-downloads
+  - Optimize model loading performance
+  - Add model validation checksums
+  - Verify model deletion disk cleanup
+  - Improve warnings for large model sizes
+
+### Success Criteria
+- [ ] Progress bars show during model download
+- [ ] Models are cached and re-used when already downloaded
+- [ ] Model loading is optimized
+- [ ] Checksums validate model integrity
+- [ ] Model deletion properly cleans up disk space
+- [ ] Clear warnings for large model sizes
+
+### Deliverables
+- Updated `main.py` - Enhanced import-model with progress bars, caching, checksums
+- Updated `src/model/registry.py` - Checksum support in metadata
+- Updated `src/model/adapters/qwen.py` - Optimized loading
+
+### Estimated Complexity
+- **Low-Medium**: Mostly enhancements to existing code
+- **Risk**: Low - additive improvements
+- **Time**: 2-3 hours
+
+---
+
 ## Success Metrics
 
 After all sessions:
@@ -278,4 +316,5 @@ After all sessions:
 - ✅ Checkpoints preserve model metadata
 - ✅ Backward compatible with existing workflows
 - ✅ Documentation is complete
+- ✅ Polish features complete (progress bars, caching, checksums, optimizations)
 

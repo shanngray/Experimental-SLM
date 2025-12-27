@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "models": {
+    "qwen-qwen25-05b": {
+      "model_name": "qwen-qwen25-05b",
+      "model_id": "Qwen/Qwen2.5-0.5B",
+      "architecture_type": "qwen",
+      "local_path": "models/qwen-qwen25-05b",
+      "source": "huggingface",
+      "created_at": "2025-12-27T01:54:45.218852+00:00",
+      "metadata": {
+        "license": "apache-2.0",
+        "model_size": 494032768,
+        "architecture_type": "qwen",
+        "checksum": "e523f9a41cde2aab50c3bfc22ba61380ddb8bb051b2cb4896127404baef17a70"
+      },
+      "fine_tuned_from": null
+    }
+  }
+}
